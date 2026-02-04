@@ -1,0 +1,541 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// User Model
+model User {
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String    @unique
+  emailVerified      DateTime?
+  image              String?
+  password           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  onboardingComplete Boolean   @default(false)
+  
+  // Email preferences
+  emailReminders     Boolean   @default(true)
+  emailWeeklySummary Boolean   @default(true)
+
+  // Relations
+  accounts           Account[]
+  sessions           Session[]
+  subscription       Subscription?
+  profile            Profile?
+  jobs               Job[]
+  pipelineItems      PipelineItem[]
+  jobScores          JobScore[]
+  applicationKits    ApplicationKit[]
+  feedbacks          Feedback[]
+  scoringWeights     UserScoringWeights?
+  eventMetrics       EventMetric[]
+  quotaUsage         QuotaUsage[]
+  contacts           Contact[]
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+// Subscription Model
+model Subscription {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  stripeCustomerId    String?  @unique
+  stripeSubscriptionId String? @unique
+  status              SubscriptionStatus @default(FREE)
+  priceId             String?
+  currentPeriodEnd    DateTime?
+  cancelAtPeriodEnd   Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([status])
+}
+
+enum SubscriptionStatus {
+  FREE
+  PRO
+  POWER
+  PAST_DUE
+  CANCELED
+}
+
+// Profile Model
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  profileVersion  Int      @default(1)
+  
+  // Basic info
+  headline        String?
+  summary         String?  @db.Text
+  location        String?
+  remotePreference RemotePreference @default(HYBRID)
+  targetRole      String?
+  targetSeniority SeniorityLevel?
+  salaryMin       Int?
+  salaryMax       Int?
+  
+  // Full CV text (parsed/pasted)
+  cvText          String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experiences Experience[]
+  educations  Education[]
+  skills      Skill[]
+
+  @@index([userId])
+}
+
+enum RemotePreference {
+  REMOTE
+  HYBRID
+  ONSITE
+  ANY
+}
+
+enum SeniorityLevel {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  MANAGER
+  DIRECTOR
+  VP
+  C_LEVEL
+}
+
+// Experience Model
+model Experience {
+  id          String    @id @default(cuid())
+  profileId   String
+  title       String
+  company     String
+  location    String?
+  startDate   DateTime
+  endDate     DateTime?
+  current     Boolean   @default(false)
+  description String?   @db.Text
+  highlights  String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+// Education Model
+model Education {
+  id          String    @id @default(cuid())
+  profileId   String
+  institution String
+  degree      String?
+  field       String?
+  startDate   DateTime?
+  endDate     DateTime?
+  gpa         Float?
+  highlights  String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+// Skill Model
+model Skill {
+  id          String      @id @default(cuid())
+  profileId   String
+  name        String
+  level       SkillLevel  @default(INTERMEDIATE)
+  yearsExp    Float?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, name])
+  @@index([profileId])
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// Job Model
+model Job {
+  id               String    @id @default(cuid())
+  userId           String
+  
+  // Basic info
+  title            String
+  company          String
+  url              String?
+  location         String?
+  jobType          JobType   @default(FULL_TIME)
+  remoteType       RemotePreference @default(HYBRID)
+  seniorityEstimate SeniorityLevel?
+  
+  // Salary
+  salaryMin        Int?
+  salaryMax        Int?
+  salaryCurrency   String?   @default("USD")
+  
+  // Description
+  descriptionRaw   String    @db.Text
+  descriptionClean String?   @db.Text
+  
+  // Extracted data (cached)
+  keywordsJson     String?   @db.Text  // JSON array of extracted keywords
+  mustHaveSkills   String[]
+  niceToHaveSkills String[]
+  
+  // Metadata
+  postedAt         DateTime?
+  expiresAt        DateTime?
+  source           String?
+  
+  // Status
+  archived         Boolean   @default(false)
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pipelineItem    PipelineItem?
+  jobScores       JobScore[]
+  applicationKits ApplicationKit[]
+  feedbacks       Feedback[]
+  contacts        Contact[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([userId, archived])
+  @@index([company])
+  @@index([createdAt])
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+}
+
+// Job Score History
+model JobScore {
+  id              String   @id @default(cuid())
+  userId          String
+  jobId           String
+  profileVersion  Int
+  overallScore    Int      // 0-100 overall match score
+  breakdownJson   String   @db.Text  // JSON with detailed breakdown
+  explanationJson String?  @db.Text  // Human-readable explanations
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, profileVersion])
+  @@index([userId])
+  @@index([jobId])
+  @@index([createdAt])
+  @@index([overallScore])
+}
+
+// Application Kit
+model ApplicationKit {
+  id            String   @id @default(cuid())
+  userId        String
+  jobId         String
+  
+  // Generation settings
+  variantUsed   String   @default("A")  // A or B for A/B testing
+  tone          String   @default("professional")  // professional, friendly, confident
+  
+  // Generated content
+  resumeBullets String[] // Array of suggested bullet points
+  coverShort    String?  @db.Text
+  coverLong     String?  @db.Text
+  qaJson        String?  @db.Text  // Interview Q&A as JSON array
+  
+  // Tracking
+  copied        Boolean  @default(false)
+  used          Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([jobId])
+  @@index([userId, createdAt])
+}
+
+// Pipeline Item
+model PipelineItem {
+  id            String        @id @default(cuid())
+  userId        String
+  jobId         String        @unique
+  stage         PipelineStage @default(SAVED)
+  nextActionAt  DateTime?
+  lastActionAt  DateTime?
+  notes         String?       @db.Text
+  stageHistory  String?       @db.Text  // JSON array of stage transitions with timestamps
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, stage])
+  @@index([nextActionAt])
+  @@index([createdAt])
+}
+
+enum PipelineStage {
+  SAVED
+  APPLYING
+  APPLIED
+  INTERVIEWING
+  OFFER
+  REJECTED
+  WITHDRAWN
+  ACCEPTED
+}
+
+// Contact for a job
+model Contact {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  name      String
+  role      String?
+  email     String?
+  phone     String?
+  linkedin  String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([jobId])
+}
+
+// Feedback for calibration
+model Feedback {
+  id         String         @id @default(cuid())
+  userId     String
+  jobId      String
+  outcome    FeedbackOutcome
+  accuracy   Int            // 1-5 scale
+  factor     FeedbackFactor?
+  note       String?        @db.Text
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+enum FeedbackOutcome {
+  INTERVIEW
+  OFFER
+  REJECTED
+  GHOSTED
+}
+
+enum FeedbackFactor {
+  SKILLS
+  LOCATION
+  SENIORITY
+  COMPANY_FIT
+  SALARY
+  OTHER
+}
+
+// User Scoring Weights for calibration
+model UserScoringWeights {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  
+  // Weights (default to 1.0, adjusted based on feedback)
+  wSkills         Float    @default(1.0)
+  wLocation       Float    @default(1.0)
+  wSeniorityPenalty Float  @default(1.0)
+  wMustHaveGap    Float    @default(1.0)
+  wNiceHaveGap    Float    @default(0.5)
+  wSalary         Float    @default(0.5)
+  
+  // Bias adjustment
+  bias            Float    @default(0.0)
+  
+  // A/B testing preferences
+  preferredVariantResume    String?
+  preferredVariantCover     String?
+  preferredVariantQA        String?
+  variantASuccessResume     Int    @default(0)
+  variantBSuccessResume     Int    @default(0)
+  variantASuccessCover      Int    @default(0)
+  variantBSuccessCover      Int    @default(0)
+  variantASuccessQA         Int    @default(0)
+  variantBSuccessQA         Int    @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Event Metrics for tracking
+model EventMetric {
+  id         String      @id @default(cuid())
+  userId     String
+  jobId      String?
+  kitId      String?
+  assetType  AssetType
+  eventType  EventType
+  variant    String?     // A or B
+  durationMs Int?
+  metadata   String?     @db.Text  // JSON for additional data
+  createdAt  DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([assetType, eventType])
+  @@index([createdAt])
+}
+
+enum AssetType {
+  RESUME_BULLETS
+  COVER_SHORT
+  COVER_LONG
+  QA_PACK
+  SCORE
+}
+
+enum EventType {
+  VIEW
+  COPY
+  USE
+  EDIT
+  EXPORT
+  GENERATE
+}
+
+// Quota Usage
+model QuotaUsage {
+  id               String   @id @default(cuid())
+  userId           String
+  monthKey         String   // YYYY-MM format
+  aiGenerationsUsed Int     @default(0)
+  jobsCreated      Int     @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, monthKey])
+  @@index([userId])
+  @@index([monthKey])
+}
+
+// System Log
+model SystemLog {
+  id        String   @id @default(cuid())
+  type      LogType
+  level     LogLevel @default(INFO)
+  message   String
+  metaJson  String?  @db.Text
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([level])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+enum LogType {
+  AUTH
+  API
+  CRON
+  STRIPE
+  AI
+  ERROR
+  ADMIN
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
