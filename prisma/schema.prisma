@@ -76,6 +76,9 @@ model User {
   eventMetrics       EventMetric[]
   quotaUsage         QuotaUsage[]
   contacts           Contact[]
+  documents          Document[]
+  notifications      Notification[]
+  preferences        UserPreferences?
 
   @@index([email])
   @@index([createdAt])
@@ -538,4 +541,118 @@ enum LogLevel {
   INFO
   WARN
   ERROR
+}
+
+// Document/CV Storage
+model Document {
+  id          String       @id @default(cuid())
+  userId      String
+  name        String
+  filename    String
+  mimeType    String
+  size        Int
+  s3Key       String       @unique
+  version     String?      // e.g., "v1", "Technical", "Creative"
+  isDefault   Boolean      @default(false)
+  type        DocumentType @default(CV)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@index([type])
+}
+
+enum DocumentType {
+  CV
+  COVER_LETTER
+  PORTFOLIO
+  OTHER
+}
+
+// Notifications
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String?
+  link      String?
+  read      Boolean          @default(false)
+  metadata  String?          @db.Text  // JSON for additional data
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  JOB_MATCH
+  REMINDER_DUE
+  APPLICATION_UPDATE
+  WEEKLY_SUMMARY
+  SYSTEM
+  INTERVIEW_SCHEDULED
+}
+
+// User Preferences (extended onboarding)
+model UserPreferences {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  
+  // Job search preferences
+  targetRoles         String[] // Multiple target roles
+  targetLocations     String[] // Multiple locations
+  keywords            String[] // Include keywords
+  excludeKeywords     String[] // Exclude keywords
+  blacklistCompanies  String[] // Companies to avoid
+  targetCompanies     String[] // Dream companies
+  
+  // Work preferences
+  minSalary           Int?
+  maxSalary           Int?
+  preferRemote        Boolean  @default(false)
+  preferHybrid        Boolean  @default(true)
+  preferOnsite        Boolean  @default(false)
+  
+  // Seniority
+  seniorityLevels     SeniorityLevel[]
+  
+  // Job types
+  preferredJobTypes   JobType[]
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Timeline Event for Pipeline Items
+model TimelineEvent {
+  id            String        @id @default(cuid())
+  pipelineItemId String
+  eventType     TimelineEventType
+  previousStage PipelineStage?
+  newStage      PipelineStage?
+  note          String?
+  documentId    String?       // Reference to document used
+  createdAt     DateTime      @default(now())
+
+  @@index([pipelineItemId])
+  @@index([createdAt])
+}
+
+enum TimelineEventType {
+  STAGE_CHANGE
+  NOTE_ADDED
+  DOCUMENT_ATTACHED
+  REMINDER_SET
+  CONTACT_ADDED
+  INTERVIEW_SCHEDULED
+  FEEDBACK_RECEIVED
 }

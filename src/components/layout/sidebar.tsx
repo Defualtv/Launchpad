@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Briefcase,
@@ -15,16 +16,20 @@ import {
   ChevronRight,
   Shield,
   Menu,
+  FileText,
+  Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/jobs', label: 'Jobs', icon: Briefcase },
   { href: '/pipeline', label: 'Pipeline', icon: Kanban },
+  { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/notifications', label: 'Notifications', icon: Bell, showBadge: true },
   { href: '/profile', label: 'Profile', icon: User },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -34,6 +39,27 @@ export function Sidebar() {
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    async function fetchUnreadCount() {
+      try {
+        const response = await fetch('/api/notifications?unread=true&limit=1');
+        const data = await response.json();
+        if (data.success) {
+          setUnreadCount(data.data.unreadCount);
+        }
+      } catch (error) {
+        console.error('Failed to fetch notification count:', error);
+      }
+    }
+    
+    fetchUnreadCount();
+    // Poll every 60 seconds
+    const interval = setInterval(fetchUnreadCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <>
@@ -72,7 +98,7 @@ export function Sidebar() {
             {!collapsed && (
               <Link href="/dashboard" className="flex items-center gap-2">
                 <Briefcase className="h-6 w-6 text-primary" />
-                <span className="font-bold text-lg">Job Agent</span>
+                <span className="font-bold text-lg">JobCircle</span>
               </Link>
             )}
             <Button
@@ -94,13 +120,14 @@ export function Sidebar() {
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                const showNotificationBadge = item.showBadge && unreadCount > 0;
                 return (
                   <li key={item.href}>
                     <Link
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-md transition-colors',
+                        'flex items-center gap-3 px-3 py-2 rounded-md transition-colors relative',
                         isActive
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted text-muted-foreground hover:text-foreground',
@@ -109,6 +136,17 @@ export function Sidebar() {
                     >
                       <item.icon className="h-5 w-5 flex-shrink-0" />
                       {!collapsed && <span>{item.label}</span>}
+                      {showNotificationBadge && (
+                        <Badge 
+                          variant="destructive" 
+                          className={cn(
+                            'h-5 min-w-5 flex items-center justify-center p-0 text-xs',
+                            collapsed ? 'absolute -top-1 -right-1' : 'ml-auto'
+                          )}
+                        >
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </Badge>
+                      )}
                     </Link>
                   </li>
                 );

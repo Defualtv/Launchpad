@@ -1,10 +1,11 @@
-import { PrismaClient, SubscriptionStatus, RemotePreference, SeniorityLevel, SkillLevel, PipelineStage, JobType } from '@prisma/client';
+import { PrismaClient, SubscriptionStatus, RemotePreference, SeniorityLevel, SkillLevel, PipelineStage, JobType, NotificationType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting seed...');
+  console.log('🌱 Starting JobCircle seed...');
+  console.log('================================');
 
   // Create demo user
   const hashedPassword = await bcrypt.hash('demo123456', 12);
@@ -55,6 +56,30 @@ async function main() {
   });
 
   console.log('✅ Created demo profile');
+
+  // Create user preferences
+  await prisma.userPreferences.upsert({
+    where: { userId: demoUser.id },
+    update: {},
+    create: {
+      userId: demoUser.id,
+      targetRoles: ['Software Engineer', 'Full Stack Engineer', 'Frontend Engineer'],
+      targetLocations: ['San Francisco, CA', 'New York, NY', 'Remote'],
+      keywords: ['TypeScript', 'React', 'Node.js', 'Python'],
+      excludeKeywords: ['PHP', 'WordPress'],
+      blacklistCompanies: ['Evil Corp'],
+      targetCompanies: ['Google', 'Meta', 'Stripe', 'Vercel'],
+      minSalary: 120000,
+      maxSalary: 200000,
+      preferRemote: true,
+      preferHybrid: true,
+      preferOnsite: false,
+      seniorityLevels: [SeniorityLevel.SENIOR, SeniorityLevel.LEAD],
+      preferredJobTypes: [JobType.FULL_TIME],
+    },
+  });
+
+  console.log('✅ Created user preferences');
 
   // Create experiences
   await prisma.experience.createMany({
@@ -307,7 +332,97 @@ Nice to have:
 
   console.log('✅ Created admin user');
 
+  // Create sample documents for demo user
+  await prisma.document.createMany({
+    data: [
+      {
+        userId: demoUser.id,
+        name: 'Resume - Technical',
+        filename: 'resume_technical_v2.pdf',
+        mimeType: 'application/pdf',
+        size: 245000,
+        s3Key: `documents/${demoUser.id}/resume_technical_v2.pdf`,
+        version: 'Technical',
+        type: 'CV',
+        isDefault: true,
+      },
+      {
+        userId: demoUser.id,
+        name: 'Resume - General',
+        filename: 'resume_general.pdf',
+        mimeType: 'application/pdf',
+        size: 198000,
+        s3Key: `documents/${demoUser.id}/resume_general.pdf`,
+        version: 'General',
+        type: 'CV',
+        isDefault: false,
+      },
+      {
+        userId: demoUser.id,
+        name: 'Cover Letter Template',
+        filename: 'cover_letter_template.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 35000,
+        s3Key: `documents/${demoUser.id}/cover_letter_template.docx`,
+        type: 'COVER_LETTER',
+        isDefault: false,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  console.log('✅ Created sample documents');
+
+  // Create sample notifications
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: demoUser.id,
+        type: NotificationType.JOB_MATCH,
+        title: '3 new jobs match your preferences!',
+        message: 'We found 3 Senior Software Engineer positions in San Francisco that match your skills.',
+        link: '/jobs',
+        read: false,
+      },
+      {
+        userId: demoUser.id,
+        type: NotificationType.REMINDER_DUE,
+        title: 'Application reminder',
+        message: 'Don\'t forget to follow up on your application to Innovative Tech Co.',
+        link: '/pipeline',
+        read: false,
+      },
+      {
+        userId: demoUser.id,
+        type: NotificationType.WEEKLY_SUMMARY,
+        title: 'Your weekly job search summary',
+        message: 'You applied to 2 jobs and have 1 interview scheduled this week.',
+        read: true,
+      },
+      {
+        userId: demoUser.id,
+        type: NotificationType.SYSTEM,
+        title: 'Welcome to JobCircle!',
+        message: 'Thanks for joining. Complete your profile to get better job matches.',
+        link: '/profile',
+        read: true,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  console.log('✅ Created sample notifications');
+
+  console.log('================================');
   console.log('🎉 Seed completed successfully!');
+  console.log('');
+  console.log('📧 Demo User Login:');
+  console.log('   Email: demo@jobagent.com');
+  console.log('   Password: demo123456');
+  console.log('');
+  console.log('🔐 Admin User Login:');
+  console.log('   Email: admin@jobagent.com');
+  console.log('   Password: demo123456');
 }
 
 main()

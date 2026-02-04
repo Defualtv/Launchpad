@@ -1,183 +1,222 @@
-# Job Agent - AI-Powered Job Search Assistant
+# JobCircle - AI-Powered Job Application Platform
 
-A production-ready SaaS platform that helps job seekers track opportunities, get AI-generated application materials, and optimize their job search with data-driven insights.
+A professional SaaS web platform for managing your entire job search journey - from discovery to offer.
 
 ## 🚀 Features
 
 ### Core Functionality
-- **Job Tracking** - Add jobs and get instant match scores based on your profile
-- **AI Application Kits** - Generate personalized cover letters, resume tweaks, and interview prep
-- **Pipeline Management** - Kanban and list views to track application progress
-- **Analytics Dashboard** - Track response rates, score distributions, and skill gaps
-- **Smart Reminders** - Never miss a follow-up with automated reminders
+- **Job Tracking** - Add jobs manually or discover them automatically
+- **Pipeline Management** - Kanban and list views with drag-and-drop
+- **AI Match Scoring** - Get instant match scores based on your profile
+- **Application Kits** - Generate personalized cover letters and interview prep
+- **Document Management** - Store and manage multiple CV versions
+- **Smart Notifications** - Never miss important updates or reminders
 
-### Profile & Scoring
-- **Skill-based Matching** - Weighted scoring based on skills, location, salary, and seniority
-- **Adaptive Weights** - Scoring improves based on your feedback
-- **Profile Versioning** - Track how profile changes affect scores over time
+### Profile & Matching
+- **Comprehensive Profile** - Skills, experience, education, preferences
+- **Smart Preferences** - Target roles, locations, companies, salary range
+- **Adaptive Scoring** - Learns from your feedback to improve matches
+- **Keyword Matching** - Include/exclude keywords and companies
+
+### Pipeline Stages
+```
+SAVED → APPLYING → APPLIED → INTERVIEWING → OFFER/REJECTED
+```
 
 ### Subscription Tiers
 | Feature | FREE | PRO ($19/mo) | POWER ($39/mo) |
 |---------|------|--------------|----------------|
 | Jobs Tracked | 25 | Unlimited | Unlimited |
+| Documents | 10 | 25 | 50 |
 | AI Generations/mo | 5 | 60 | 200 |
-| Score History | Last 3 | Full | Full |
 | Priority Support | ❌ | ✅ | ✅ |
 
 ## 🛡️ Safety First
 
-**Job Agent will NEVER automatically apply to jobs on your behalf.** You are always in complete control. We provide tools to help you apply more effectively, but the final action is always yours.
+**JobCircle will NEVER automatically apply to jobs without your explicit action.** The platform helps you:
+- Discover relevant jobs
+- Score and prioritize opportunities
+- Generate application materials
+- Track your progress
+
+But the final "Apply" action is always yours to take.
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Database**: PostgreSQL + Prisma ORM
-- **Auth**: NextAuth.js
-- **Styling**: Tailwind CSS + Radix UI
-- **Payments**: Stripe
-- **Email**: Resend
-- **AI**: OpenAI GPT-4o-mini (with mock fallback)
-- **Testing**: Vitest
+| Layer | Technology |
+|-------|------------|
+| **Framework** | Next.js 14 (App Router) |
+| **Language** | TypeScript |
+| **Database** | PostgreSQL + Prisma ORM |
+| **Auth** | NextAuth.js (JWT) |
+| **Styling** | Tailwind CSS + shadcn/ui |
+| **Payments** | Stripe |
+| **Email** | Resend |
+| **AI** | OpenAI GPT-4o-mini |
+| **Storage** | S3-compatible (MinIO for local) |
+| **Testing** | Vitest |
 
-## 📦 Getting Started
+## 📦 Quick Start
 
 ### Prerequisites
 - Node.js 18+
-- PostgreSQL database
+- Docker (recommended) OR PostgreSQL database
 - (Optional) OpenAI API key
 - (Optional) Stripe account
-- (Optional) Resend account
 
-### Installation
+### Option A: Docker Setup (Recommended)
 
-1. **Clone and install dependencies**
+1. **Clone and install**
    ```bash
-   cd agent
+   git clone https://github.com/Defualtv/agent1-.git
+   cd agent1-
    npm install
    ```
 
-2. **Set up environment variables**
+2. **Start local services**
    ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` with your configuration:
-   ```env
-   DATABASE_URL="postgresql://..."
-   NEXTAUTH_SECRET="your-secret-key"
-   NEXTAUTH_URL="http://localhost:3000"
-   
-   # Optional - AI features work in mock mode without this
-   OPENAI_API_KEY="sk-..."
-   
-   # Optional - Billing features
-   STRIPE_SECRET_KEY="sk_..."
-   STRIPE_WEBHOOK_SECRET="whsec_..."
-   STRIPE_PRICE_ID_PRO="price_..."
-   STRIPE_PRICE_ID_POWER="price_..."
-   
-   # Optional - Email features
-   RESEND_API_KEY="re_..."
+   docker-compose up -d
    ```
 
-3. **Set up the database**
+3. **Configure environment**
+   ```bash
+   cp .env.example .env.local
+   ```
+   
+   The defaults work with Docker. For AI features, add your OpenAI key.
+
+4. **Set up database**
+   ```bash
+   npx prisma generate
+   npx prisma migrate dev
+   npx prisma db seed
+   ```
+
+5. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+6. **Open http://localhost:3000**
+
+### Option B: External Database
+
+1. **Clone and install**
+   ```bash
+   git clone https://github.com/Defualtv/agent1-.git
+   cd agent1-
+   npm install
+   ```
+
+2. **Configure environment**
+   ```bash
+   cp .env.example .env.local
+   ```
+   
+   Edit `.env.local`:
+   ```env
+   DATABASE_URL="postgresql://user:password@host:5432/jobcircle"
+   NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+   NEXTAUTH_URL="http://localhost:3000"
+   ```
+
+3. **Set up database**
    ```bash
    npx prisma generate
    npx prisma db push
    npx prisma db seed
    ```
 
-4. **Start development server**
+4. **Start server**
    ```bash
    npm run dev
    ```
 
-5. **Open http://localhost:3000**
+### Demo Credentials
 
-### Demo Account
-After seeding, you can login with:
-- Email: `demo@jobagent.com`
-- Password: `demo123456`
-
-Or the admin account:
-- Email: `admin@jobagent.com`
-- Password: `demo123456`
+| Account | Email | Password |
+|---------|-------|----------|
+| Demo User | demo@jobagent.com | demo123456 |
+| Admin | admin@jobagent.com | demo123456 |
 
 ## 🏗️ Project Structure
 
 ```
-src/
-├── app/
-│   ├── (dashboard)/      # Protected dashboard routes
-│   │   ├── dashboard/    # Main dashboard
-│   │   ├── jobs/         # Job listing and detail
-│   │   ├── pipeline/     # Application tracking
-│   │   ├── analytics/    # Insights and stats
-│   │   ├── profile/      # User profile
-│   │   └── settings/     # Account settings
-│   ├── api/              # API routes
-│   │   ├── auth/         # Authentication
-│   │   ├── jobs/         # Job CRUD + scoring
-│   │   ├── pipeline/     # Pipeline management
-│   │   ├── profile/      # Profile management
-│   │   ├── feedback/     # Outcome feedback
-│   │   ├── analytics/    # Analytics data
-│   │   ├── billing/      # Stripe integration
-│   │   ├── webhooks/     # Stripe webhooks
-│   │   ├── cron/         # Scheduled jobs
-│   │   └── user/         # User settings
-│   ├── login/            # Login page
-│   ├── register/         # Registration page
-│   └── onboarding/       # Onboarding wizard
-├── components/
-│   ├── ui/               # Reusable UI components
-│   ├── layout/           # Layout components
-│   └── providers.tsx     # Context providers
-├── lib/
-│   ├── prisma.ts         # Database client
-│   ├── auth.ts           # NextAuth config
-│   ├── scoring.ts        # Match scoring engine
-│   ├── calibration.ts    # Weight adjustment
-│   ├── ai.ts             # OpenAI integration
-│   ├── stripe.ts         # Stripe integration
-│   ├── email.ts          # Email templates
-│   ├── plans.ts          # Subscription plans
-│   ├── quota.ts          # Usage limits
-│   └── validations.ts    # Zod schemas
-└── types/
-    └── next-auth.d.ts    # Type extensions
+├── docs/                    # Documentation
+│   ├── ARCHITECTURE.md      # System architecture & design
+│   └── PHASE2_DESIGN.md     # Mock interview feature design
+├── prisma/
+│   ├── schema.prisma        # Database schema
+│   └── seed.ts              # Demo data seeding
+├── src/
+│   ├── app/                 # Next.js App Router pages
+│   │   ├── (dashboard)/     # Protected dashboard routes
+│   │   │   ├── admin/       # Admin dashboard
+│   │   │   ├── analytics/   # Analytics & insights
+│   │   │   ├── dashboard/   # Main dashboard
+│   │   │   ├── documents/   # CV & document management
+│   │   │   ├── jobs/        # Job listings & details
+│   │   │   ├── notifications/ # Notifications
+│   │   │   ├── pipeline/    # Kanban/list pipeline view
+│   │   │   ├── profile/     # User profile
+│   │   │   └── settings/    # Account settings
+│   │   ├── api/             # API routes
+│   │   ├── login/           # Auth pages
+│   │   └── onboarding/      # Onboarding wizard
+│   ├── components/          # React components
+│   │   ├── layout/          # Layout components
+│   │   └── ui/              # shadcn/ui components
+│   └── lib/                 # Utility functions
+├── docker-compose.yml       # Local services
+├── .env.example             # Environment template
+└── package.json
 ```
 
 ## 🔌 API Reference
 
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/auth/register | Create account |
+| POST | /api/auth/[...nextauth] | NextAuth handlers |
+
 ### Jobs
-- `GET /api/jobs` - List jobs with pagination and filtering
-- `POST /api/jobs` - Create a new job (auto-scores)
-- `GET /api/jobs/[id]` - Get job details
-- `PUT /api/jobs/[id]` - Update job
-- `DELETE /api/jobs/[id]` - Delete job
-- `POST /api/jobs/[id]/score` - Recalculate score
-- `POST /api/jobs/[id]/kit` - Generate application kit
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/jobs | List jobs (paginated, filterable) |
+| POST | /api/jobs | Create job |
+| GET | /api/jobs/[id] | Get job details |
+| PUT | /api/jobs/[id] | Update job |
+| POST | /api/jobs/[id]/score | Generate match score |
+| POST | /api/jobs/[id]/kit | Generate application kit |
 
 ### Pipeline
-- `GET /api/pipeline` - Get pipeline items (kanban/list view)
-- `POST /api/pipeline` - Add job to pipeline
-- `PUT /api/pipeline` - Update pipeline item
-- `DELETE /api/pipeline` - Remove from pipeline
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/pipeline | Get pipeline items |
+| PUT | /api/pipeline | Update stage |
 
-### Profile
-- `GET /api/profile` - Get user profile
-- `PUT /api/profile` - Update profile
-- `POST /api/profile/skills` - Add skill
-- `POST /api/profile/experiences` - Add experience
-- `POST /api/profile/educations` - Add education
+### Documents
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/documents | List documents |
+| POST | /api/documents | Upload document |
+| PUT | /api/documents/[id] | Update document |
+| DELETE | /api/documents/[id] | Delete document |
 
-### Feedback
-- `POST /api/feedback` - Submit outcome feedback (adjusts scoring weights)
+### Notifications
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/notifications | List notifications |
+| PUT | /api/notifications | Mark all read |
+| PUT | /api/notifications/[id] | Mark one read |
 
-### Billing
-- `GET /api/billing` - Get subscription status
-- `POST /api/billing` - Create checkout session or portal link
+### Cron Jobs
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/cron/discovery | Discover new jobs |
+| GET | /api/cron/reminders | Send reminders |
+| GET | /api/cron/weekly-summary | Send weekly summary |
 
 ## 🚢 Deployment
 
@@ -185,42 +224,67 @@ src/
 
 1. Push to GitHub
 2. Import project in Vercel
-3. Add environment variables
+3. Add environment variables:
+   ```
+   DATABASE_URL=postgresql://...
+   NEXTAUTH_SECRET=...
+   NEXTAUTH_URL=https://yourdomain.com
+   ```
 4. Deploy
 
-Cron jobs are configured in `vercel.json`:
+Cron jobs configured in `vercel.json`:
 - Reminders: Every hour
 - Weekly Summary: Sundays at 6 PM
+- Job Discovery: Daily at 8 AM
 
-### Self-hosted
+## 🔒 Security
 
-```bash
-npm run build
-npm start
-```
-
-Set up external cron to call:
-- `GET /api/cron/reminders` (hourly)
-- `GET /api/cron/weekly-summary` (weekly)
-
-Include `Authorization: Bearer YOUR_CRON_SECRET` header.
+- ✅ JWT-based authentication with httpOnly cookies
+- ✅ Server-side session validation
+- ✅ Input validation with Zod schemas
+- ✅ SQL injection prevention via Prisma
+- ✅ Rate limiting on sensitive endpoints
+- ✅ Signed URLs for document downloads
+- ✅ User data isolation
 
 ## 🧪 Testing
 
 ```bash
-# Run tests
+# Run all tests
 npm test
 
 # Watch mode
 npm run test:watch
 
-# Coverage
-npm run test:coverage
+# Run once
+npm run test:run
 ```
 
-## 📝 License
+## 🗺️ Roadmap
 
-MIT License - see LICENSE file for details.
+### Phase 1 (Current) ✅
+- User authentication & profiles
+- Job tracking & pipeline
+- AI scoring & application kits
+- Document management
+- Notifications
+- Analytics dashboard
+- Admin dashboard
+
+### Phase 2 (Planned)
+- Mock interview practice
+- AI-powered feedback
+- Progress tracking
+- Question bank
+
+### Phase 3 (Future)
+- Job API integrations
+- Chrome extension
+- Mobile app
+
+## 📄 License
+
+MIT License
 
 ## 🤝 Contributing
 
@@ -228,4 +292,4 @@ Contributions welcome! Please read our contributing guidelines first.
 
 ---
 
-Built with ❤️ for job seekers everywhere. Good luck with your search!
+Built with ❤️ using Next.js, Prisma, and AI
