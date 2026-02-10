@@ -9,7 +9,19 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// GET /api/pipeline/[id]/contacts - Get contacts for a pipeline item
+// Helper: get the pipeline item and verify ownership, return the jobId
+async function getPipelineJobId(pipelineItemId: string, userId: string) {
+  const pipelineItem = await prisma.pipelineItem.findFirst({
+    where: {
+      id: pipelineItemId,
+      job: { userId },
+    },
+    select: { jobId: true },
+  });
+  return pipelineItem?.jobId ?? null;
+}
+
+// GET /api/pipeline/[id]/contacts - Get contacts for a pipeline item's job
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,21 +30,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
+    const jobId = await getPipelineJobId(id, session.user.id);
 
-    // Verify pipeline item belongs to user
-    const pipelineItem = await prisma.pipelineItem.findFirst({
-      where: {
-        id,
-        job: { userId: session.user.id },
-      },
-      include: { contacts: true },
-    });
-
-    if (!pipelineItem) {
+    if (!jobId) {
       return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Pipeline item not found', 404));
     }
 
-    return successResponse({ contacts: pipelineItem.contacts });
+    const contacts = await prisma.contact.findMany({
+      where: { jobId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return successResponse({ contacts });
   } catch (error) {
     return errorResponse(error);
   }
@@ -47,9 +56,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
+    const jobId = await getPipelineJobId(id, session.user.id);
+
+    if (!jobId) {
+      return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Pipeline item not found', 404));
+    }
+
     const body = await request.json();
     const result = contactSchema.safeParse(body);
-    
+
     if (!result.success) {
       return errorResponse(createError(
         ErrorCodes.VALIDATION_ERROR,
@@ -59,26 +74,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ));
     }
 
-    // Verify pipeline item belongs to user
-    const pipelineItem = await prisma.pipelineItem.findFirst({
-      where: {
-        id,
-        job: { userId: session.user.id },
-      },
-    });
-
-    if (!pipelineItem) {
-      return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Pipeline item not found', 404));
-    }
-
     const contact = await prisma.contact.create({
       data: {
-        pipelineItemId: id,
+        userId: session.user.id,
+        jobId,
         name: result.data.name,
         role: result.data.role,
         email: result.data.email,
         phone: result.data.phone,
-        linkedIn: result.data.linkedIn,
+        linkedin: result.data.linkedin,
         notes: result.data.notes,
       },
     });
@@ -98,6 +102,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
+    const jobId = await getPipelineJobId(id, session.user.id);
+
+    if (!jobId) {
+      return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Pipeline item not found', 404));
+    }
+
     const body = await request.json();
     const { contactId, ...data } = body;
 
@@ -105,23 +115,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return errorResponse(createError(ErrorCodes.VALIDATION_ERROR, 'Contact ID required', 400));
     }
 
-    // Verify contact belongs to user's pipeline
-    const contact = await prisma.contact.findFirst({
-      where: {
-        id: contactId,
-        pipelineItem: {
-          id,
-          job: { userId: session.user.id },
-        },
-      },
+    // Verify contact belongs to this job
+    const existing = await prisma.contact.findFirst({
+      where: { id: contactId, jobId },
     });
 
-    if (!contact) {
+    if (!existing) {
       return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Contact not found', 404));
     }
 
     const result = contactSchema.partial().safeParse(data);
-    
+
     if (!result.success) {
       return errorResponse(createError(
         ErrorCodes.VALIDATION_ERROR,
@@ -138,7 +142,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         ...(result.data.role !== undefined && { role: result.data.role }),
         ...(result.data.email !== undefined && { email: result.data.email }),
         ...(result.data.phone !== undefined && { phone: result.data.phone }),
-        ...(result.data.linkedIn !== undefined && { linkedIn: result.data.linkedIn }),
+        ...(result.data.linkedin !== undefined && { linkedin: result.data.linkedin }),
         ...(result.data.notes !== undefined && { notes: result.data.notes }),
       },
     });
@@ -158,6 +162,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params;
+    const jobId = await getPipelineJobId(id, session.user.id);
+
+    if (!jobId) {
+      return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Pipeline item not found', 404));
+    }
+
     const { searchParams } = new URL(request.url);
     const contactId = searchParams.get('contactId');
 
@@ -165,15 +175,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(createError(ErrorCodes.VALIDATION_ERROR, 'Contact ID required', 400));
     }
 
-    // Verify contact belongs to user's pipeline
+    // Verify contact belongs to this job
     const contact = await prisma.contact.findFirst({
-      where: {
-        id: contactId,
-        pipelineItem: {
-          id,
-          job: { userId: session.user.id },
-        },
-      },
+      where: { id: contactId, jobId },
     });
 
     if (!contact) {

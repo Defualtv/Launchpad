@@ -158,3 +158,11 @@ export const PLAN_FEATURES_COMPARISON = [
   { feature: 'Score calibration', free: '—', pro: '—', power: '✓' },
   { feature: 'A/B testing insights', free: '—', pro: '—', power: '✓' },
 ];
+
+// Placeholder for AI usage tracking - implement with your database
+export async function incrementAIUsage(userId: string): Promise<{ success: boolean; remaining: number }> {
+  // TODO: Implement proper usage tracking with database
+  // For now, this is a stub that always succeeds
+  console.log(`AI usage incremented for user: ${userId}`);
+  return { success: true, remaining: 10 };
+}

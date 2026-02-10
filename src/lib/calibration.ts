@@ -148,3 +148,6 @@ export function getWeightDescription(key: string): string {
   };
   return descriptions[key] || '';
 }
+
+// Alias for backward compatibility
+export const adjustWeights = updateWeights;

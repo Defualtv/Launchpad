@@ -3,9 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { errorResponse, successResponse, createError, ErrorCodes } from '@/lib/errors';
-import { checkAIGenerationLimit, incrementAIUsage } from '@/lib/plans';
-import { generateApplicationKit } from '@/lib/ai';
-import { AssetType } from '@prisma/client';
+import { checkAIGenerationLimit, getPlanFromStatus } from '@/lib/plans';
+import { generateApplicationKit, selectVariant } from '@/lib/ai';
+import type { Tone, Variant, AssetType } from '@/lib/ai';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -21,16 +21,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { assetType = 'FULL_KIT', variant = 'A' } = body;
+    const { tone = 'professional', type = 'all' } = body;
 
     // Check AI generation limit
-    const canGenerate = await checkAIGenerationLimit(session.user.id);
-    if (!canGenerate.allowed) {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId: session.user.id },
+    });
+    const quotaUsage = await prisma.quotaUsage.findUnique({
+      where: {
+        userId_monthKey: {
+          userId: session.user.id,
+          monthKey: currentMonth,
+        },
+      },
+    });
+
+    const status = subscription?.status || 'FREE';
+    const currentUsage = quotaUsage?.aiGenerationsUsed || 0;
+    const limitCheck = checkAIGenerationLimit(status, currentUsage);
+    
+    if (!limitCheck.allowed) {
       return errorResponse(createError(
-        ErrorCodes.QUOTA_EXCEEDED,
-        canGenerate.message,
-        403,
-        { limit: canGenerate.limit, current: canGenerate.current }
+        ErrorCodes.VALIDATION_ERROR,
+        `AI generation limit reached. ${limitCheck.remaining} remaining of ${limitCheck.limit} this month.`,
+        403
       ));
     }
 
@@ -40,28 +55,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         id,
         userId: session.user.id,
       },
-      include: {
-        scores: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
     });
 
     if (!job) {
       return errorResponse(createError(ErrorCodes.NOT_FOUND, 'Job not found', 404));
     }
 
-    // Get user profile
+    // Get user profile with skills and experiences
     const profile = await prisma.profile.findUnique({
       where: { userId: session.user.id },
       include: {
         skills: true,
         experiences: {
           orderBy: { startDate: 'desc' },
-        },
-        educations: {
-          orderBy: { graduationYear: 'desc' },
         },
       },
     });
@@ -74,56 +80,53 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ));
     }
 
-    // Generate kit using AI
+    // Get scoring weights for A/B variant selection
+    const weights = await prisma.userScoringWeights.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    const variant: Variant = selectVariant(weights, (type === 'all' ? 'cover' : type) as AssetType);
+
+    // Generate kit using AI (Claude for writing, OpenAI for extraction)
     const kitContent = await generateApplicationKit({
-      profile: {
-        headline: profile.headline,
-        summary: profile.summary,
-        skills: profile.skills.map((s) => s.name),
-        experiences: profile.experiences.map((e) => ({
-          company: e.company,
-          title: e.title,
-          description: e.description,
-          startDate: e.startDate.toISOString(),
-          endDate: e.endDate?.toISOString(),
-          current: e.current,
-        })),
-        educations: profile.educations.map((e) => ({
-          institution: e.institution,
-          degree: e.degree,
-          field: e.field,
-          graduationYear: e.graduationYear,
-        })),
-      },
-      job: {
-        title: job.title,
-        company: job.company,
-        description: job.description,
-        requirements: job.requirements || [],
-      },
-      matchedSkills: job.scores[0]?.matchedSkills || [],
-      missingSkills: job.scores[0]?.missingSkills || [],
-      assetType,
+      profile: profile as any,
+      job: job as any,
+      tone: tone as Tone,
       variant,
+      type: type as AssetType | 'all',
     });
 
     // Save the kit
     const kit = await prisma.applicationKit.create({
       data: {
+        userId: session.user.id,
         jobId: job.id,
-        assetType: assetType as AssetType,
-        variant,
-        profileVersionUsed: profile.profileVersion,
-        coverLetter: kitContent.coverLetter,
-        resumeTweaks: kitContent.resumeTweaks,
-        interviewTips: kitContent.interviewTips,
-        questions: kitContent.questions,
-        negotiationTips: kitContent.negotiationTips,
+        variantUsed: kitContent.variantUsed,
+        tone,
+        resumeBullets: kitContent.resumeBullets,
+        coverShort: kitContent.coverShort,
+        coverLong: kitContent.coverLong,
+        qaJson: JSON.stringify(kitContent.qaJson),
       },
     });
 
     // Increment AI usage
-    await incrementAIUsage(session.user.id);
+    await prisma.quotaUsage.upsert({
+      where: {
+        userId_monthKey: {
+          userId: session.user.id,
+          monthKey: currentMonth,
+        },
+      },
+      create: {
+        userId: session.user.id,
+        monthKey: currentMonth,
+        aiGenerationsUsed: 1,
+      },
+      update: {
+        aiGenerationsUsed: { increment: 1 },
+      },
+    });
 
     return successResponse({ kit }, 201);
   } catch (error) {

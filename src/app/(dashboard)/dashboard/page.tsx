@@ -48,7 +48,7 @@ export default async function DashboardPage() {
   const appliedCount = pipelineStats.find(s => s.stage === PipelineStage.APPLIED)?._count.id || 0;
   const interviewCount = pipelineStats.find(s => s.stage === PipelineStage.INTERVIEWING)?._count.id || 0;
   const avgScore = recentJobs.length > 0
-    ? Math.round(recentJobs.reduce((sum, job) => sum + (job.jobScores[0]?.score || 0), 0) / recentJobs.length)
+    ? Math.round(recentJobs.reduce((sum, job) => sum + (job.jobScores[0]?.overallScore || 0), 0) / recentJobs.length)
     : 0;
 
   return (
@@ -162,7 +162,7 @@ export default async function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 {recentJobs.map((job) => {
-                  const score = job.jobScores[0]?.score || 0;
+                  const score = job.jobScores[0]?.overallScore || 0;
                   return (
                     <Link 
                       key={job.id} 

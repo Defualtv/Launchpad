@@ -57,28 +57,28 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   onboardingComplete Boolean   @default(false)
-  
+
   // Email preferences
-  emailReminders     Boolean   @default(true)
-  emailWeeklySummary Boolean   @default(true)
+  emailReminders     Boolean @default(true)
+  emailWeeklySummary Boolean @default(true)
 
   // Relations
-  accounts           Account[]
-  sessions           Session[]
-  subscription       Subscription?
-  profile            Profile?
-  jobs               Job[]
-  pipelineItems      PipelineItem[]
-  jobScores          JobScore[]
-  applicationKits    ApplicationKit[]
-  feedbacks          Feedback[]
-  scoringWeights     UserScoringWeights?
-  eventMetrics       EventMetric[]
-  quotaUsage         QuotaUsage[]
-  contacts           Contact[]
-  documents          Document[]
-  notifications      Notification[]
-  preferences        UserPreferences?
+  accounts        Account[]
+  sessions        Session[]
+  subscription    Subscription?
+  profile         Profile?
+  jobs            Job[]
+  pipelineItems   PipelineItem[]
+  jobScores       JobScore[]
+  applicationKits ApplicationKit[]
+  feedbacks       Feedback[]
+  scoringWeights  UserScoringWeights?
+  eventMetrics    EventMetric[]
+  quotaUsage      QuotaUsage[]
+  contacts        Contact[]
+  documents       Document[]
+  notifications   Notification[]
+  preferences     UserPreferences?
 
   @@index([email])
   @@index([createdAt])
@@ -86,16 +86,16 @@ model User {
 
 // Subscription Model
 model Subscription {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  stripeCustomerId    String?  @unique
-  stripeSubscriptionId String? @unique
-  status              SubscriptionStatus @default(FREE)
-  priceId             String?
-  currentPeriodEnd    DateTime?
-  cancelAtPeriodEnd   Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  status               SubscriptionStatus @default(FREE)
+  priceId              String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -113,25 +113,25 @@ enum SubscriptionStatus {
 
 // Profile Model
 model Profile {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  profileVersion  Int      @default(1)
-  
+  id             String @id @default(cuid())
+  userId         String @unique
+  profileVersion Int    @default(1)
+
   // Basic info
-  headline        String?
-  summary         String?  @db.Text
-  location        String?
+  headline         String?
+  summary          String?          @db.Text
+  location         String?
   remotePreference RemotePreference @default(HYBRID)
-  targetRole      String?
-  targetSeniority SeniorityLevel?
-  salaryMin       Int?
-  salaryMax       Int?
-  
+  targetRole       String?
+  targetSeniority  SeniorityLevel?
+  salaryMin        Int?
+  salaryMax        Int?
+
   // Full CV text (parsed/pasted)
-  cvText          String?  @db.Text
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  cvText String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   experiences Experience[]
@@ -201,13 +201,13 @@ model Education {
 
 // Skill Model
 model Skill {
-  id          String      @id @default(cuid())
-  profileId   String
-  name        String
-  level       SkillLevel  @default(INTERMEDIATE)
-  yearsExp    Float?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id        String     @id @default(cuid())
+  profileId String
+  name      String
+  level     SkillLevel @default(INTERMEDIATE)
+  yearsExp  Float?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
@@ -224,42 +224,42 @@ enum SkillLevel {
 
 // Job Model
 model Job {
-  id               String    @id @default(cuid())
-  userId           String
-  
+  id     String @id @default(cuid())
+  userId String
+
   // Basic info
-  title            String
-  company          String
-  url              String?
-  location         String?
-  jobType          JobType   @default(FULL_TIME)
-  remoteType       RemotePreference @default(HYBRID)
+  title             String
+  company           String
+  url               String?
+  location          String?
+  jobType           JobType          @default(FULL_TIME)
+  remoteType        RemotePreference @default(HYBRID)
   seniorityEstimate SeniorityLevel?
-  
+
   // Salary
-  salaryMin        Int?
-  salaryMax        Int?
-  salaryCurrency   String?   @default("USD")
-  
+  salaryMin      Int?
+  salaryMax      Int?
+  salaryCurrency String? @default("USD")
+
   // Description
-  descriptionRaw   String    @db.Text
-  descriptionClean String?   @db.Text
-  
+  descriptionRaw   String  @db.Text
+  descriptionClean String? @db.Text
+
   // Extracted data (cached)
-  keywordsJson     String?   @db.Text  // JSON array of extracted keywords
+  keywordsJson     String?  @db.Text // JSON array of extracted keywords
   mustHaveSkills   String[]
   niceToHaveSkills String[]
-  
+
   // Metadata
-  postedAt         DateTime?
-  expiresAt        DateTime?
-  source           String?
-  
+  postedAt  DateTime?
+  expiresAt DateTime?
+  source    String?
+
   // Status
-  archived         Boolean   @default(false)
-  
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  archived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   pipelineItem    PipelineItem?
@@ -289,9 +289,9 @@ model JobScore {
   userId          String
   jobId           String
   profileVersion  Int
-  overallScore    Int      // 0-100 overall match score
-  breakdownJson   String   @db.Text  // JSON with detailed breakdown
-  explanationJson String?  @db.Text  // Human-readable explanations
+  overallScore    Int // 0-100 overall match score
+  breakdownJson   String   @db.Text // JSON with detailed breakdown
+  explanationJson String?  @db.Text // Human-readable explanations
   createdAt       DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -306,26 +306,26 @@ model JobScore {
 
 // Application Kit
 model ApplicationKit {
-  id            String   @id @default(cuid())
-  userId        String
-  jobId         String
-  
+  id     String @id @default(cuid())
+  userId String
+  jobId  String
+
   // Generation settings
-  variantUsed   String   @default("A")  // A or B for A/B testing
-  tone          String   @default("professional")  // professional, friendly, confident
-  
+  variantUsed String @default("A") // A or B for A/B testing
+  tone        String @default("professional") // professional, friendly, confident
+
   // Generated content
   resumeBullets String[] // Array of suggested bullet points
   coverShort    String?  @db.Text
   coverLong     String?  @db.Text
-  qaJson        String?  @db.Text  // Interview Q&A as JSON array
-  
+  qaJson        String?  @db.Text // Interview Q&A as JSON array
+
   // Tracking
-  copied        Boolean  @default(false)
-  used          Boolean  @default(false)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  copied Boolean @default(false)
+  used   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -337,16 +337,16 @@ model ApplicationKit {
 
 // Pipeline Item
 model PipelineItem {
-  id            String        @id @default(cuid())
-  userId        String
-  jobId         String        @unique
-  stage         PipelineStage @default(SAVED)
-  nextActionAt  DateTime?
-  lastActionAt  DateTime?
-  notes         String?       @db.Text
-  stageHistory  String?       @db.Text  // JSON array of stage transitions with timestamps
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  userId       String
+  jobId        String        @unique
+  stage        PipelineStage @default(SAVED)
+  nextActionAt DateTime?
+  lastActionAt DateTime?
+  notes        String?       @db.Text
+  stageHistory String?       @db.Text // JSON array of stage transitions with timestamps
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -391,14 +391,14 @@ model Contact {
 
 // Feedback for calibration
 model Feedback {
-  id         String         @id @default(cuid())
-  userId     String
-  jobId      String
-  outcome    FeedbackOutcome
-  accuracy   Int            // 1-5 scale
-  factor     FeedbackFactor?
-  note       String?        @db.Text
-  createdAt  DateTime       @default(now())
+  id        String          @id @default(cuid())
+  userId    String
+  jobId     String
+  outcome   FeedbackOutcome
+  accuracy  Int // 1-5 scale
+  factor    FeedbackFactor?
+  note      String?         @db.Text
+  createdAt DateTime        @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -426,49 +426,49 @@ enum FeedbackFactor {
 
 // User Scoring Weights for calibration
 model UserScoringWeights {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  
+  id     String @id @default(cuid())
+  userId String @unique
+
   // Weights (default to 1.0, adjusted based on feedback)
-  wSkills         Float    @default(1.0)
-  wLocation       Float    @default(1.0)
-  wSeniorityPenalty Float  @default(1.0)
-  wMustHaveGap    Float    @default(1.0)
-  wNiceHaveGap    Float    @default(0.5)
-  wSalary         Float    @default(0.5)
-  
+  wSkills           Float @default(1.0)
+  wLocation         Float @default(1.0)
+  wSeniorityPenalty Float @default(1.0)
+  wMustHaveGap      Float @default(1.0)
+  wNiceHaveGap      Float @default(0.5)
+  wSalary           Float @default(0.5)
+
   // Bias adjustment
-  bias            Float    @default(0.0)
-  
+  bias Float @default(0.0)
+
   // A/B testing preferences
-  preferredVariantResume    String?
-  preferredVariantCover     String?
-  preferredVariantQA        String?
-  variantASuccessResume     Int    @default(0)
-  variantBSuccessResume     Int    @default(0)
-  variantASuccessCover      Int    @default(0)
-  variantBSuccessCover      Int    @default(0)
-  variantASuccessQA         Int    @default(0)
-  variantBSuccessQA         Int    @default(0)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  preferredVariantResume String?
+  preferredVariantCover  String?
+  preferredVariantQA     String?
+  variantASuccessResume  Int     @default(0)
+  variantBSuccessResume  Int     @default(0)
+  variantASuccessCover   Int     @default(0)
+  variantBSuccessCover   Int     @default(0)
+  variantASuccessQA      Int     @default(0)
+  variantBSuccessQA      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // Event Metrics for tracking
 model EventMetric {
-  id         String      @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
   jobId      String?
   kitId      String?
   assetType  AssetType
   eventType  EventType
-  variant    String?     // A or B
+  variant    String? // A or B
   durationMs Int?
-  metadata   String?     @db.Text  // JSON for additional data
-  createdAt  DateTime    @default(now())
+  metadata   String?   @db.Text // JSON for additional data
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -497,13 +497,14 @@ enum EventType {
 
 // Quota Usage
 model QuotaUsage {
-  id               String   @id @default(cuid())
-  userId           String
-  monthKey         String   // YYYY-MM format
-  aiGenerationsUsed Int     @default(0)
-  jobsCreated      Int     @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthKey          String // YYYY-MM format
+  aiGenerationsUsed Int      @default(0)
+  jobsCreated       Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([userId, monthKey])
   @@index([userId])
@@ -545,18 +546,18 @@ enum LogLevel {
 
 // Document/CV Storage
 model Document {
-  id          String       @id @default(cuid())
-  userId      String
-  name        String
-  filename    String
-  mimeType    String
-  size        Int
-  s3Key       String       @unique
-  version     String?      // e.g., "v1", "Technical", "Creative"
-  isDefault   Boolean      @default(false)
-  type        DocumentType @default(CV)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id        String       @id @default(cuid())
+  userId    String
+  name      String
+  filename  String
+  mimeType  String
+  size      Int
+  s3Key     String       @unique
+  version   String? // e.g., "v1", "Technical", "Creative"
+  isDefault Boolean      @default(false)
+  type      DocumentType @default(CV)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -581,7 +582,7 @@ model Notification {
   message   String?
   link      String?
   read      Boolean          @default(false)
-  metadata  String?          @db.Text  // JSON for additional data
+  metadata  String?          @db.Text // JSON for additional data
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -602,46 +603,46 @@ enum NotificationType {
 
 // User Preferences (extended onboarding)
 model UserPreferences {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  
+  id     String @id @default(cuid())
+  userId String @unique
+
   // Job search preferences
-  targetRoles         String[] // Multiple target roles
-  targetLocations     String[] // Multiple locations
-  keywords            String[] // Include keywords
-  excludeKeywords     String[] // Exclude keywords
-  blacklistCompanies  String[] // Companies to avoid
-  targetCompanies     String[] // Dream companies
-  
+  targetRoles        String[] // Multiple target roles
+  targetLocations    String[] // Multiple locations
+  keywords           String[] // Include keywords
+  excludeKeywords    String[] // Exclude keywords
+  blacklistCompanies String[] // Companies to avoid
+  targetCompanies    String[] // Dream companies
+
   // Work preferences
-  minSalary           Int?
-  maxSalary           Int?
-  preferRemote        Boolean  @default(false)
-  preferHybrid        Boolean  @default(true)
-  preferOnsite        Boolean  @default(false)
-  
+  minSalary    Int?
+  maxSalary    Int?
+  preferRemote Boolean @default(false)
+  preferHybrid Boolean @default(true)
+  preferOnsite Boolean @default(false)
+
   // Seniority
-  seniorityLevels     SeniorityLevel[]
-  
+  seniorityLevels SeniorityLevel[]
+
   // Job types
-  preferredJobTypes   JobType[]
-  
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  preferredJobTypes JobType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // Timeline Event for Pipeline Items
 model TimelineEvent {
-  id            String        @id @default(cuid())
+  id             String            @id @default(cuid())
   pipelineItemId String
-  eventType     TimelineEventType
-  previousStage PipelineStage?
-  newStage      PipelineStage?
-  note          String?
-  documentId    String?       // Reference to document used
-  createdAt     DateTime      @default(now())
+  eventType      TimelineEventType
+  previousStage  PipelineStage?
+  newStage       PipelineStage?
+  note           String?
+  documentId     String? // Reference to document used
+  createdAt      DateTime          @default(now())
 
   @@index([pipelineItemId])
   @@index([createdAt])

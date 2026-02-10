@@ -228,7 +228,7 @@ export default function NotificationsPage() {
             <BellOff className="h-12 w-12 text-muted-foreground/50" />
             <h3 className="mt-4 text-lg font-semibold">No notifications</h3>
             <p className="mt-2 text-sm text-muted-foreground text-center max-w-sm">
-              You're all caught up! Notifications about job matches, reminders, and updates will appear here.
+              You&apos;re all caught up! Notifications about job matches, reminders, and updates will appear here.
             </p>
           </CardContent>
         </Card>

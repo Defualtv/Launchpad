@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
-import { PLANS } from '@/lib/plans';
+import { PLANS, getPlanFromStatus } from '@/lib/plans';
 import { logger } from '@/lib/logger';
+import { LogType, SubscriptionStatus } from '@prisma/client';
 import Stripe from 'stripe';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -23,11 +24,11 @@ export async function POST(request: NextRequest) {
     try {
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err: any) {
-      logger.warn(`Webhook signature verification failed: ${err.message}`);
+      logger.warn(LogType.STRIPE, `Webhook signature verification failed: ${err.message}`);
       return new Response(`Webhook Error: ${err.message}`, { status: 400 });
     }
 
-    logger.info(`Stripe webhook received: ${event.type}`);
+    logger.info(LogType.STRIPE, `Stripe webhook received: ${event.type}`);
 
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -62,12 +63,12 @@ export async function POST(request: NextRequest) {
       }
 
       default:
-        logger.info(`Unhandled event type: ${event.type}`);
+        logger.info(LogType.STRIPE, `Unhandled event type: ${event.type}`);
     }
 
     return new Response('OK', { status: 200 });
   } catch (error: any) {
-    logger.error(`Webhook error: ${error.message}`);
+    logger.error(LogType.STRIPE, `Webhook error: ${error.message}`);
     return new Response(`Webhook Error: ${error.message}`, { status: 500 });
   }
 }
@@ -78,7 +79,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const subscriptionId = session.subscription as string;
 
   if (!userId) {
-    logger.error('Checkout complete but no userId in metadata');
+    logger.error(LogType.STRIPE, 'Checkout complete but no userId in metadata');
     return;
   }
 
@@ -86,11 +87,13 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   const priceId = subscription.items.data[0]?.price.id;
 
-  // Find plan by price ID
+  // Determine status from price ID
   const planEntry = Object.entries(PLANS).find(
-    ([, plan]) => plan.stripePriceId === priceId
+    ([, plan]) => plan.priceId === priceId
   );
-  const planId = planEntry ? planEntry[0] : 'PRO';
+  const status: SubscriptionStatus = planEntry 
+    ? (planEntry[0] as SubscriptionStatus) 
+    : SubscriptionStatus.PRO;
 
   // Create or update subscription in database
   await prisma.subscription.upsert({
@@ -99,24 +102,20 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       userId,
       stripeCustomerId: customerId,
       stripeSubscriptionId: subscriptionId,
-      stripePriceId: priceId,
-      planId,
-      status: 'ACTIVE',
-      currentPeriodStart: new Date(subscription.current_period_start * 1000),
+      priceId,
+      status,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
     update: {
       stripeCustomerId: customerId,
       stripeSubscriptionId: subscriptionId,
-      stripePriceId: priceId,
-      planId,
-      status: 'ACTIVE',
-      currentPeriodStart: new Date(subscription.current_period_start * 1000),
+      priceId,
+      status,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
   });
 
-  logger.info(`Subscription created for user ${userId}, plan: ${planId}`);
+  logger.info(LogType.STRIPE, `Subscription created for user ${userId}, status: ${status}`);
 }
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
@@ -129,46 +128,37 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   });
 
   if (!existingSubscription) {
-    logger.warn(`Subscription update for unknown customer: ${customerId}`);
+    logger.warn(LogType.STRIPE, `Subscription update for unknown customer: ${customerId}`);
     return;
   }
 
-  // Find plan by price ID
+  // Map Stripe status to our SubscriptionStatus enum
+  let status: SubscriptionStatus = SubscriptionStatus.PRO;
+  
+  // First determine plan from price
   const planEntry = Object.entries(PLANS).find(
-    ([, plan]) => plan.stripePriceId === priceId
+    ([, plan]) => plan.priceId === priceId
   );
-  const planId = planEntry ? planEntry[0] : existingSubscription.planId;
-
-  // Map Stripe status to our status
-  let status: 'ACTIVE' | 'CANCELED' | 'PAST_DUE' | 'TRIALING' = 'ACTIVE';
-  switch (subscription.status) {
-    case 'active':
-      status = 'ACTIVE';
-      break;
-    case 'canceled':
-      status = 'CANCELED';
-      break;
-    case 'past_due':
-      status = 'PAST_DUE';
-      break;
-    case 'trialing':
-      status = 'TRIALING';
-      break;
+  
+  if (subscription.status === 'canceled') {
+    status = SubscriptionStatus.CANCELED;
+  } else if (subscription.status === 'past_due') {
+    status = SubscriptionStatus.PAST_DUE;
+  } else if (planEntry) {
+    status = planEntry[0] as SubscriptionStatus;
   }
 
   await prisma.subscription.update({
     where: { id: existingSubscription.id },
     data: {
-      stripePriceId: priceId,
-      planId,
+      priceId,
       status,
-      currentPeriodStart: new Date(subscription.current_period_start * 1000),
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     },
   });
 
-  logger.info(`Subscription updated for customer ${customerId}, status: ${status}`);
+  logger.info(LogType.STRIPE, `Subscription updated for customer ${customerId}, status: ${status}`);
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
@@ -180,19 +170,19 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   });
 
   if (!existingSubscription) {
-    logger.warn(`Subscription delete for unknown customer: ${customerId}`);
+    logger.warn(LogType.STRIPE, `Subscription delete for unknown customer: ${customerId}`);
     return;
   }
 
   await prisma.subscription.update({
     where: { id: existingSubscription.id },
     data: {
-      status: 'CANCELED',
+      status: SubscriptionStatus.CANCELED,
       cancelAtPeriodEnd: false,
     },
   });
 
-  logger.info(`Subscription canceled for customer ${customerId}`);
+  logger.info(LogType.STRIPE, `Subscription canceled for customer ${customerId}`);
 }
 
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
@@ -203,14 +193,14 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
     where: { stripeCustomerId: customerId },
   });
 
-  if (subscription && subscription.status === 'PAST_DUE') {
+  if (subscription && subscription.status === SubscriptionStatus.PAST_DUE) {
     // Reactivate subscription
     await prisma.subscription.update({
       where: { id: subscription.id },
-      data: { status: 'ACTIVE' },
+      data: { status: SubscriptionStatus.PRO },
     });
 
-    logger.info(`Subscription reactivated for customer ${customerId}`);
+    logger.info(LogType.STRIPE, `Subscription reactivated for customer ${customerId}`);
   }
 }
 
@@ -225,10 +215,10 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   if (subscription) {
     await prisma.subscription.update({
       where: { id: subscription.id },
-      data: { status: 'PAST_DUE' },
+      data: { status: SubscriptionStatus.PAST_DUE },
     });
 
     // TODO: Send email notification about failed payment
-    logger.warn(`Payment failed for customer ${customerId}`);
+    logger.warn(LogType.STRIPE, `Payment failed for customer ${customerId}`);
   }
 }

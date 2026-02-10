@@ -177,3 +177,7 @@ export type EventTrackInput = z.infer<typeof eventTrackSchema>;
 export type ScoringWeightsInput = z.infer<typeof scoringWeightsSchema>;
 export type EmailPreferencesInput = z.infer<typeof emailPreferencesSchema>;
 export type JobFilterInput = z.infer<typeof jobFilterSchema>;
+
+// Aliases for backward compatibility
+export const jobSchema = jobCreateSchema;
+export const pipelineItemSchema = pipelineUpdateSchema;

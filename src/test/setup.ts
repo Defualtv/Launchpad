@@ -15,7 +15,7 @@ import { vi, beforeEach, afterEach } from 'vitest';
 // ============================================
 
 // Set test environment variables
-process.env.NODE_ENV = 'test';
+(process.env as Record<string, string>).NODE_ENV = 'test';
 process.env.NEXTAUTH_SECRET = 'test-secret';
 process.env.NEXTAUTH_URL = 'http://localhost:3000';
 process.env.CRON_SECRET = 'test-cron-secret';
@@ -25,7 +25,7 @@ process.env.CRON_SECRET = 'test-cron-secret';
 // ============================================
 
 vi.mock('@/lib/prisma', () => {
-  const mockPrismaClient = {
+  const mockPrismaClient: Record<string, unknown> = {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),

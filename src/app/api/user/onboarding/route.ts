@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
           where: { id: profile.id },
           data: {
             headline: data.headline,
-            desiredTitle: data.desiredTitle,
-            desiredLocation: data.desiredLocation,
+            targetRole: data.targetRole || data.desiredTitle,
+            location: data.location || data.desiredLocation,
             remotePreference: data.remotePreference,
           },
         });
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
         await prisma.profile.update({
           where: { id: profile.id },
           data: {
-            minSalary: data.minSalary,
-            maxSalary: data.maxSalary,
+            salaryMin: data.salaryMin || data.minSalary,
+            salaryMax: data.salaryMax || data.maxSalary,
             targetSeniority: data.targetSeniority,
           },
         });
@@ -125,7 +125,7 @@ export async function GET() {
 
     // Determine current step
     let currentStep = 1;
-    if (user.profile?.desiredTitle) {
+    if (user.profile?.targetRole) {
       currentStep = 2;
     }
     if (user.profile?.skills && user.profile.skills.length > 0) {

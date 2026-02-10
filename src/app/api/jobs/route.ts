@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { jobSchema } from '@/lib/validations';
 import { errorResponse, successResponse, createError, ErrorCodes } from '@/lib/errors';
-import { checkJobLimit } from '@/lib/plans';
+import { checkJobLimit, getPlanLimits } from '@/lib/plans';
 import { calculateScore } from '@/lib/scoring';
 
 // GET /api/jobs - List jobs with pagination and filtering
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { company: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
+        { descriptionRaw: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     // For score filtering, we need to join with JobScore
     if (minScore !== undefined || maxScore !== undefined) {
-      where.scores = {
+      where.jobScores = {
         some: {
           ...(minScore !== undefined && { overallScore: { gte: minScore } }),
           ...(maxScore !== undefined && { overallScore: { lte: maxScore } }),
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       prisma.job.findMany({
         where,
         include: {
-          scores: {
+          jobScores: {
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
@@ -91,8 +91,8 @@ export async function GET(request: NextRequest) {
     let sortedJobs = jobs;
     if (sortBy === 'score') {
       sortedJobs = [...jobs].sort((a, b) => {
-        const scoreA = a.scores[0]?.overallScore || 0;
-        const scoreB = b.scores[0]?.overallScore || 0;
+        const scoreA = a.jobScores[0]?.overallScore || 0;
+        const scoreB = b.jobScores[0]?.overallScore || 0;
         return sortOrder === 'desc' ? scoreB - scoreA : scoreA - scoreB;
       });
     }
@@ -103,12 +103,13 @@ export async function GET(request: NextRequest) {
       title: job.title,
       company: job.company,
       location: job.location,
-      salary: job.salary,
+      url: job.url,
       jobType: job.jobType,
-      sourceUrl: job.sourceUrl,
+      salaryMin: job.salaryMin,
+      salaryMax: job.salaryMax,
       postedAt: job.postedAt,
       createdAt: job.createdAt,
-      latestScore: job.scores[0] || null,
+      latestScore: job.jobScores[0] || null,
       hasKit: job.applicationKits.length > 0,
       pipelineStage: job.pipelineItem?.stage || null,
     }));
@@ -136,13 +137,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Check job limit based on subscription
-    const canCreate = await checkJobLimit(session.user.id);
-    if (!canCreate.allowed) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { subscription: true },
+    });
+
+    const status = user?.subscription?.status || 'FREE';
+    const currentJobCount = await prisma.job.count({
+      where: { userId: session.user.id, archived: false },
+    });
+
+    if (!checkJobLimit(status, currentJobCount)) {
+      const limits = getPlanLimits(status);
       return errorResponse(createError(
-        ErrorCodes.QUOTA_EXCEEDED,
-        canCreate.message,
+        ErrorCodes.JOB_LIMIT_EXCEEDED,
+        `Job limit reached (${currentJobCount}/${limits.maxJobs}). Upgrade your plan for more.`,
         403,
-        { limit: canCreate.limit, current: canCreate.current }
+        { limit: limits.maxJobs, current: currentJobCount }
       ));
     }
 
@@ -165,66 +176,41 @@ export async function POST(request: NextRequest) {
         title: result.data.title,
         company: result.data.company,
         location: result.data.location,
-        description: result.data.description,
-        salary: result.data.salary,
+        descriptionRaw: result.data.descriptionRaw,
+        url: result.data.url || null,
         jobType: result.data.jobType,
-        requirements: result.data.requirements,
-        sourceUrl: result.data.sourceUrl,
-        postedAt: result.data.postedAt ? new Date(result.data.postedAt) : null,
+        remoteType: result.data.remoteType,
+        seniorityEstimate: result.data.seniorityEstimate,
+        salaryMin: result.data.salaryMin,
+        salaryMax: result.data.salaryMax,
+        salaryCurrency: result.data.salaryCurrency,
       },
     });
 
     // Get user profile for scoring
     const profile = await prisma.profile.findUnique({
       where: { userId: session.user.id },
-      include: { skills: true },
+      include: { skills: true, experiences: true },
+    });
+
+    // Get user's custom weights
+    const weights = await prisma.userScoringWeights.findUnique({
+      where: { userId: session.user.id },
     });
 
     // Calculate initial score
     let score = null;
     if (profile) {
-      const scoreResult = calculateScore(
-        {
-          desiredTitle: profile.desiredTitle,
-          desiredLocation: profile.desiredLocation,
-          remotePreference: profile.remotePreference || 'FLEXIBLE',
-          minSalary: profile.minSalary,
-          maxSalary: profile.maxSalary,
-          targetSeniority: profile.targetSeniority,
-          skills: profile.skills.map((s) => ({
-            name: s.name,
-            level: s.level,
-            yearsExp: s.yearsExp,
-          })),
-        },
-        {
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          description: job.description,
-          salary: job.salary,
-          requirements: job.requirements || [],
-        }
-      );
-
-      // Get user's custom weights
-      const weights = await prisma.userScoringWeights.findUnique({
-        where: { userId: session.user.id },
-      });
+      const scoreResult = calculateScore(profile, job, weights);
 
       score = await prisma.jobScore.create({
         data: {
           jobId: job.id,
+          userId: session.user.id,
           profileVersion: profile.profileVersion,
-          overallScore: scoreResult.overall,
-          skillsScore: scoreResult.breakdown.skills,
-          locationScore: scoreResult.breakdown.location,
-          salaryScore: scoreResult.breakdown.salary,
-          seniorityScore: scoreResult.breakdown.seniority,
-          matchedSkills: scoreResult.matchedSkills || [],
-          missingSkills: scoreResult.missingSkills || [],
-          explanation: scoreResult.explanation,
-          weightsSnapshot: weights || undefined,
+          overallScore: Math.round(scoreResult.breakdown.calibratedScore),
+          breakdownJson: JSON.stringify(scoreResult.breakdown),
+          explanationJson: JSON.stringify(scoreResult.explanation),
         },
       });
     }

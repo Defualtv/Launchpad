@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sendWeeklySummary } from '@/lib/email';
 import { logger } from '@/lib/logger';
+import { LogType } from '@prisma/client';
 import { subWeeks } from 'date-fns';
 
 // This endpoint should be called by a cron job once a week (e.g., Sunday evening)
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
             },
           },
           include: {
-            scores: {
+            jobScores: {
               orderBy: { createdAt: 'desc' },
               take: 1,
             },
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    logger.info(`Sending weekly summary to ${users.length} users`);
+    logger.info(LogType.CRON, `Sending weekly summary to ${users.length} users`);
 
     let sent = 0;
     let skipped = 0;
@@ -96,13 +97,13 @@ export async function GET(request: NextRequest) {
 
         // Top scored jobs this week
         const topJobs = user.jobs
-          .filter((j) => j.scores[0])
-          .sort((a, b) => (b.scores[0]?.score || 0) - (a.scores[0]?.score || 0))
+          .filter((j) => j.jobScores[0])
+          .sort((a, b) => (b.jobScores[0]?.overallScore || 0) - (a.jobScores[0]?.overallScore || 0))
           .slice(0, 5)
           .map((j) => ({
             title: j.title,
             company: j.company,
-            score: j.scores[0]?.score || 0,
+            score: j.jobScores[0]?.overallScore || 0,
             url: `${process.env.NEXT_PUBLIC_APP_URL}/jobs/${j.id}`,
           }));
 
@@ -154,19 +155,13 @@ export async function GET(request: NextRequest) {
 
         sent++;
       } catch (error: any) {
-        logger.error(`Failed to send weekly summary to user ${user.id}: ${error.message}`);
+        logger.error(LogType.CRON, `Failed to send weekly summary to user ${user.id}: ${error.message}`);
         failed++;
       }
     }
 
     // Log event
-    await prisma.eventMetric.create({
-      data: {
-        eventType: 'WEEKLY_SUMMARY',
-        count: sent,
-        metadata: { skipped, failed },
-      },
-    });
+    logger.info(LogType.CRON, `Weekly summary cron complete: ${sent} sent, ${skipped} skipped, ${failed} failed`);
 
     return Response.json({
       success: true,
@@ -176,7 +171,7 @@ export async function GET(request: NextRequest) {
       failed,
     });
   } catch (error: any) {
-    logger.error(`Weekly summary cron error: ${error.message}`);
+    logger.error(LogType.CRON, `Weekly summary cron error: ${error.message}`);
     return new Response(`Error: ${error.message}`, { status: 500 });
   }
 }

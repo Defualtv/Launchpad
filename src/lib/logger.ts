@@ -113,3 +113,11 @@ export async function cleanupOldLogs(daysToKeep: number = 30): Promise<number> {
 
   return result.count;
 }
+
+// Convenience logger object for compatibility
+export const logger = {
+  info: logInfo,
+  error: logError,
+  warn: logWarn,
+  log,
+};

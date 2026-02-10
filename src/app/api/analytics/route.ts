@@ -74,11 +74,10 @@ export async function GET(request: NextRequest) {
 
     // Applications over time
     const applicationsOverTime = await prisma.pipelineItem.groupBy({
-      by: ['appliedAt'],
+      by: ['createdAt'],
       where: {
         job: { userId: session.user.id },
-        appliedAt: { not: null },
-        ...(startDate && { appliedAt: { gte: startDate } }),
+        ...(startDate && { createdAt: { gte: startDate } }),
       },
       _count: true,
     });
@@ -119,8 +118,14 @@ export async function GET(request: NextRequest) {
     };
 
     // AI usage stats
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
     const quotaUsage = await prisma.quotaUsage.findUnique({
-      where: { userId: session.user.id },
+      where: {
+        userId_monthKey: {
+          userId: session.user.id,
+          monthKey: currentMonth,
+        },
+      },
     });
 
     // Kit generation stats
@@ -137,21 +142,28 @@ export async function GET(request: NextRequest) {
         job: { userId: session.user.id },
       },
       select: {
-        matchedSkills: true,
-        missingSkills: true,
+        breakdownJson: true,
       },
     });
 
     const skillFrequency: Record<string, { matched: number; missing: number }> = {};
     allScores.forEach((score) => {
-      (score.matchedSkills as string[]).forEach((skill) => {
-        if (!skillFrequency[skill]) skillFrequency[skill] = { matched: 0, missing: 0 };
-        skillFrequency[skill].matched++;
-      });
-      (score.missingSkills as string[]).forEach((skill) => {
-        if (!skillFrequency[skill]) skillFrequency[skill] = { matched: 0, missing: 0 };
-        skillFrequency[skill].missing++;
-      });
+      try {
+        const breakdown = JSON.parse(score.breakdownJson);
+        const matchedSkills = breakdown.matchedSkills || [];
+        const missingSkills = breakdown.missingSkills || [];
+        
+        (matchedSkills as string[]).forEach((skill: string) => {
+          if (!skillFrequency[skill]) skillFrequency[skill] = { matched: 0, missing: 0 };
+          skillFrequency[skill].matched++;
+        });
+        (missingSkills as string[]).forEach((skill: string) => {
+          if (!skillFrequency[skill]) skillFrequency[skill] = { matched: 0, missing: 0 };
+          skillFrequency[skill].missing++;
+        });
+      } catch {
+        // Skip scores with invalid JSON
+      }
     });
 
     const topMatchedSkills = Object.entries(skillFrequency)
@@ -209,7 +221,7 @@ export async function GET(request: NextRequest) {
       usage: {
         aiGenerations: {
           used: quotaUsage?.aiGenerationsUsed || 0,
-          resetAt: quotaUsage?.aiGenerationsResetAt,
+          monthKey: quotaUsage?.monthKey || currentMonth,
         },
       },
     });

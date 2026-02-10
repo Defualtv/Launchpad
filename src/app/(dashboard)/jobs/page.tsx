@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -62,6 +62,14 @@ function getScoreBadgeVariant(score: number): 'default' | 'secondary' | 'destruc
 }
 
 export default function JobsPage() {
+  return (
+    <Suspense fallback={<div className="p-8"><Skeleton className="h-96 w-full" /></div>}>
+      <JobsContent />
+    </Suspense>
+  );
+}
+
+function JobsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

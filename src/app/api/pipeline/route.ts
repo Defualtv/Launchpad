@@ -31,17 +31,16 @@ export async function GET(request: NextRequest) {
       include: {
         job: {
           include: {
-            scores: {
+            jobScores: {
               orderBy: { createdAt: 'desc' },
               take: 1,
             },
+            contacts: true,
           },
         },
-        contacts: true,
       },
       orderBy: [
         { stage: 'asc' },
-        { priority: 'desc' },
         { updatedAt: 'desc' },
       ],
     });
@@ -56,6 +55,7 @@ export async function GET(request: NextRequest) {
         OFFER: [],
         REJECTED: [],
         WITHDRAWN: [],
+        ACCEPTED: [],
       };
 
       pipelineItems.forEach((item) => {
@@ -63,19 +63,18 @@ export async function GET(request: NextRequest) {
           id: item.id,
           jobId: item.jobId,
           stage: item.stage,
-          priority: item.priority,
           notes: item.notes,
-          appliedAt: item.appliedAt,
-          reminderAt: item.reminderAt,
+          nextActionAt: item.nextActionAt,
+          lastActionAt: item.lastActionAt,
           updatedAt: item.updatedAt,
           job: {
             id: item.job.id,
             title: item.job.title,
             company: item.job.company,
             location: item.job.location,
-            score: item.job.scores[0]?.overallScore || null,
+            score: item.job.jobScores[0]?.overallScore || null,
           },
-          contactCount: item.contacts.length,
+          contactCount: item.job.contacts.length,
         });
       });
 
@@ -87,10 +86,9 @@ export async function GET(request: NextRequest) {
       id: item.id,
       jobId: item.jobId,
       stage: item.stage,
-      priority: item.priority,
       notes: item.notes,
-      appliedAt: item.appliedAt,
-      reminderAt: item.reminderAt,
+      nextActionAt: item.nextActionAt,
+      lastActionAt: item.lastActionAt,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       job: {
@@ -98,10 +96,11 @@ export async function GET(request: NextRequest) {
         title: item.job.title,
         company: item.job.company,
         location: item.job.location,
-        salary: item.job.salary,
-        score: item.job.scores[0]?.overallScore || null,
+        salaryMin: item.job.salaryMin,
+        salaryMax: item.job.salaryMax,
+        score: item.job.jobScores[0]?.overallScore || null,
       },
-      contacts: item.contacts,
+      contacts: item.job.contacts,
     }));
 
     return successResponse({ items });
@@ -119,7 +118,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const result = pipelineItemSchema.safeParse(body);
+    const { jobId, ...rest } = body;
+
+    if (!jobId) {
+      return errorResponse(createError(ErrorCodes.VALIDATION_ERROR, 'Job ID is required', 400));
+    }
+
+    const result = pipelineItemSchema.safeParse(rest);
     
     if (!result.success) {
       return errorResponse(createError(
@@ -133,7 +138,7 @@ export async function POST(request: NextRequest) {
     // Verify job belongs to user
     const job = await prisma.job.findFirst({
       where: {
-        id: result.data.jobId,
+        id: jobId,
         userId: session.user.id,
       },
     });
@@ -144,7 +149,7 @@ export async function POST(request: NextRequest) {
 
     // Check if already in pipeline
     const existing = await prisma.pipelineItem.findUnique({
-      where: { jobId: result.data.jobId },
+      where: { jobId },
     });
 
     if (existing) {
@@ -157,11 +162,11 @@ export async function POST(request: NextRequest) {
 
     const pipelineItem = await prisma.pipelineItem.create({
       data: {
-        jobId: result.data.jobId,
+        userId: session.user.id,
+        jobId,
         stage: result.data.stage || 'SAVED',
-        priority: result.data.priority || 5,
         notes: result.data.notes,
-        reminderAt: result.data.reminderAt ? new Date(result.data.reminderAt) : null,
+        nextActionAt: result.data.nextActionAt ? new Date(result.data.nextActionAt) : null,
       },
     });
 
@@ -200,20 +205,16 @@ export async function PUT(request: NextRequest) {
 
     // Track stage changes
     const stageChanged = data.stage && data.stage !== existing.stage;
-    const appliedAt = stageChanged && data.stage === 'APPLIED' && !existing.appliedAt
-      ? new Date()
-      : existing.appliedAt;
 
     const pipelineItem = await prisma.pipelineItem.update({
       where: { id },
       data: {
         ...(data.stage && { stage: data.stage }),
-        ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.notes !== undefined && { notes: data.notes }),
-        ...(data.reminderAt !== undefined && { 
-          reminderAt: data.reminderAt ? new Date(data.reminderAt) : null 
+        ...(data.nextActionAt !== undefined && { 
+          nextActionAt: data.nextActionAt ? new Date(data.nextActionAt) : null 
         }),
-        appliedAt,
+        ...(stageChanged && { lastActionAt: new Date() }),
       },
     });
 

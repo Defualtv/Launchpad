@@ -16,7 +16,7 @@ export async function GET() {
       where: { userId: session.user.id },
       include: { 
         educations: {
-          orderBy: { graduationYear: 'desc' },
+          orderBy: { endDate: 'desc' },
         },
       },
     });
@@ -63,8 +63,10 @@ export async function POST(request: NextRequest) {
         institution: result.data.institution,
         degree: result.data.degree,
         field: result.data.field,
-        graduationYear: result.data.graduationYear,
+        startDate: result.data.startDate ? new Date(result.data.startDate) : null,
+        endDate: result.data.endDate ? new Date(result.data.endDate) : null,
         gpa: result.data.gpa,
+        highlights: result.data.highlights || [],
       },
     });
 
@@ -123,8 +125,10 @@ export async function PUT(request: NextRequest) {
         institution: result.data.institution,
         degree: result.data.degree,
         field: result.data.field,
-        graduationYear: result.data.graduationYear,
+        startDate: result.data.startDate ? new Date(result.data.startDate) : null,
+        endDate: result.data.endDate ? new Date(result.data.endDate) : null,
         gpa: result.data.gpa,
+        highlights: result.data.highlights || [],
       },
     });
 

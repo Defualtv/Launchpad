@@ -1,10 +1,37 @@
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { Profile, Job, Skill, Experience, UserScoringWeights } from '@prisma/client';
 
-// Initialize OpenAI client only if API key is available
+// ============================================
+// HYBRID AI STRATEGY:
+// - Claude 3.5 Sonnet → Quality writing (cover letters, emails)
+// - GPT-4o-mini → Fast/cheap operations (keyword extraction, scoring)
+// ============================================
+
+// Initialize AI clients only if API keys are available
 const openai = process.env.OPENAI_API_KEY 
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
+
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
+
+// AI provider preference
+type AIProvider = 'claude' | 'openai' | 'mock';
+
+function getPreferredProvider(task: 'writing' | 'extraction'): AIProvider {
+  // For writing tasks (cover letters, emails), prefer Claude
+  if (task === 'writing') {
+    if (anthropic) return 'claude';
+    if (openai) return 'openai';
+    return 'mock';
+  }
+  // For extraction/scoring, prefer OpenAI (cheaper)
+  if (openai) return 'openai';
+  if (anthropic) return 'claude';
+  return 'mock';
+}
 
 export type AssetType = 'resume' | 'cover' | 'qa';
 export type Tone = 'professional' | 'friendly' | 'confident';
@@ -32,8 +59,17 @@ interface GeneratedKit {
 }
 
 // Check if we should use real AI
-function useRealAI(): boolean {
-  return !!openai && !!process.env.OPENAI_API_KEY;
+function shouldUseRealAI(): boolean {
+  return !!openai || !!anthropic;
+}
+
+// Check which AI providers are available
+export function getAIStatus(): { claude: boolean; openai: boolean; anyAvailable: boolean } {
+  return {
+    claude: !!anthropic,
+    openai: !!openai,
+    anyAvailable: !!openai || !!anthropic,
+  };
 }
 
 // Select variant based on A/B testing preferences
@@ -150,8 +186,89 @@ ${profile.userId}`;
   };
 }
 
-// Generate kit using OpenAI
-async function generateAIKit(options: GenerateKitOptions): Promise<GeneratedKit> {
+// Generate kit using Claude (preferred for quality writing)
+async function generateWithClaude(options: GenerateKitOptions): Promise<GeneratedKit> {
+  if (!anthropic) {
+    return generateMockKit(options);
+  }
+
+  const { profile, job, tone, variant } = options;
+
+  const prompt = `You are an expert career coach and resume writer. Create compelling, professional application materials.
+
+CRITICAL RULES:
+1. NEVER fabricate experience or skills the candidate doesn't have
+2. Only mention skills and experience that are provided in the profile
+3. If information is missing, acknowledge the gap or use generic language
+4. Be ${tone} in tone
+5. This is variant ${variant} - ${variant === 'A' ? 'focus on achievements and metrics' : 'focus on skills and potential'}
+
+CANDIDATE PROFILE:
+Summary: ${profile.summary || 'No summary provided'}
+Skills: ${profile.skills.map(s => `${s.name} (${s.level})`).join(', ')}
+Experience:
+${profile.experiences.map(e => `- ${e.title} at ${e.company}: ${e.description || 'No description'}`).join('\n')}
+
+TARGET JOB:
+Title: ${job.title}
+Company: ${job.company}
+Description: ${job.descriptionRaw.slice(0, 2000)}
+
+Generate:
+1. 5 resume bullet points tailored to this job (based ONLY on the candidate's actual experience)
+2. A short cover letter paragraph (3-4 sentences)
+3. A full cover letter (3 paragraphs)
+4. 5 interview Q&A pairs
+
+Respond with valid JSON only:
+{
+  "resumeBullets": ["bullet1", "bullet2", ...],
+  "coverShort": "Short paragraph...",
+  "coverLong": "Full cover letter...",
+  "qaJson": [{"question": "Q1", "answer": "A1"}, ...]
+}`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2500,
+      messages: [
+        { role: 'user', content: prompt },
+      ],
+    });
+
+    const content = response.content[0];
+    if (content.type !== 'text') {
+      return generateMockKit(options);
+    }
+
+    // Extract JSON from response (Claude may include markdown)
+    let jsonText = content.text;
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonText = jsonMatch[0];
+    }
+
+    const parsed = JSON.parse(jsonText);
+    return {
+      resumeBullets: parsed.resumeBullets || [],
+      coverShort: parsed.coverShort || '',
+      coverLong: parsed.coverLong || '',
+      qaJson: parsed.qaJson || [],
+      variantUsed: variant,
+    };
+  } catch (error) {
+    console.error('Claude API error:', error);
+    // Fallback to OpenAI if available
+    if (openai) {
+      return generateWithOpenAI(options);
+    }
+    return generateMockKit(options);
+  }
+}
+
+// Generate kit using OpenAI (fallback)
+async function generateWithOpenAI(options: GenerateKitOptions): Promise<GeneratedKit> {
   if (!openai) {
     return generateMockKit(options);
   }
@@ -221,56 +338,100 @@ Format your response as JSON with keys: resumeBullets (array), coverShort (strin
   }
 }
 
-// Main export function
+// Main export function - uses Claude for quality, OpenAI as fallback
 export async function generateApplicationKit(options: GenerateKitOptions): Promise<GeneratedKit> {
-  if (useRealAI()) {
-    return generateAIKit(options);
+  const provider = getPreferredProvider('writing');
+  
+  switch (provider) {
+    case 'claude':
+      return generateWithClaude(options);
+    case 'openai':
+      return generateWithOpenAI(options);
+    default:
+      return generateMockKit(options);
   }
-  return generateMockKit(options);
 }
 
-// AI-powered keyword extraction (with fallback)
+// AI-powered keyword extraction (uses GPT-4o-mini for cost efficiency)
 export async function extractKeywordsAI(description: string): Promise<string[]> {
-  if (!useRealAI()) {
+  const provider = getPreferredProvider('extraction');
+  
+  if (provider === 'mock') {
     // Use heuristic extraction as fallback
     const { extractKeywords } = await import('@/lib/scoring');
     return extractKeywords(description);
   }
 
   try {
-    const response = await openai!.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: 'Extract technical skills and requirements from job descriptions. Return only a JSON array of skill names.',
-        },
-        {
-          role: 'user',
-          content: `Extract all technical skills, tools, and requirements from this job description:\n\n${description.slice(0, 3000)}`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-      max_tokens: 500,
-    });
+    if (provider === 'openai' && openai) {
+      // Preferred: Use GPT-4o-mini (cheaper, faster)
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'Extract technical skills and requirements from job descriptions. Return only a JSON object with a "skills" array.',
+          },
+          {
+            role: 'user',
+            content: `Extract all technical skills, tools, and requirements from this job description:\n\n${description.slice(0, 3000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_tokens: 500,
+      });
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      const { extractKeywords } = await import('@/lib/scoring');
-      return extractKeywords(description);
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        return parsed.skills || parsed.keywords || [];
+      }
+    } else if (provider === 'claude' && anthropic) {
+      // Fallback: Use Claude if OpenAI unavailable
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 500,
+        messages: [
+          {
+            role: 'user',
+            content: `Extract all technical skills, tools, and requirements from this job description. Return ONLY a JSON object with a "skills" array, no other text.\n\n${description.slice(0, 3000)}`,
+          },
+        ],
+      });
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return parsed.skills || parsed.keywords || [];
+        }
+      }
     }
-
-    const parsed = JSON.parse(content);
-    return parsed.skills || parsed.keywords || [];
   } catch (error) {
     console.error('Keyword extraction error:', error);
-    const { extractKeywords } = await import('@/lib/scoring');
-    return extractKeywords(description);
   }
+
+  // Fallback to heuristic extraction
+  const { extractKeywords } = await import('@/lib/scoring');
+  return extractKeywords(description);
 }
 
 // Check if AI is available
 export function isAIAvailable(): boolean {
-  return useRealAI();
+  return shouldUseRealAI();
+}
+
+// Get current AI provider info (for debugging/status display)
+export function getActiveProvider(task: 'writing' | 'extraction' = 'writing'): string {
+  const provider = getPreferredProvider(task);
+  switch (provider) {
+    case 'claude':
+      return 'Claude 3.5 Sonnet';
+    case 'openai':
+      return 'GPT-4o-mini';
+    default:
+      return 'Mock (no API keys)';
+  }
 }

@@ -119,3 +119,6 @@ export function constructWebhookEvent(
 ): Stripe.Event {
   return stripe.webhooks.constructEvent(body, signature, secret);
 }
+
+// Alias for backward compatibility
+export const createCustomerPortalSession = createBillingPortalSession;

@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sendReminderEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
+import { LogType } from '@prisma/client';
 
 // This endpoint should be called by a cron job every hour
 // Vercel Cron: Add to vercel.json
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    logger.info(`Found ${dueReminders.length} reminders to send`);
+    logger.info(LogType.CRON, `Found ${dueReminders.length} reminders to send`);
 
     let sent = 0;
     let failed = 0;
@@ -75,19 +76,13 @@ export async function GET(request: NextRequest) {
 
         sent++;
       } catch (error: any) {
-        logger.error(`Failed to send reminder for item ${item.id}: ${error.message}`);
+        logger.error(LogType.CRON, `Failed to send reminder for item ${item.id}: ${error.message}`);
         failed++;
       }
     }
 
     // Log event
-    await prisma.eventMetric.create({
-      data: {
-        eventType: 'REMINDER_SENT',
-        count: sent,
-        metadata: { failed },
-      },
-    });
+    logger.info(LogType.CRON, `Reminders cron complete: ${sent} sent, ${failed} failed out of ${dueReminders.length}`);
 
     return Response.json({
       success: true,
@@ -96,7 +91,7 @@ export async function GET(request: NextRequest) {
       failed,
     });
   } catch (error: any) {
-    logger.error(`Reminder cron error: ${error.message}`);
+    logger.error(LogType.CRON, `Reminder cron error: ${error.message}`);
     return new Response(`Error: ${error.message}`, { status: 500 });
   }
 }

@@ -18,9 +18,10 @@ export async function GET() {
         id: true,
         name: true,
         email: true,
-        emailPreferences: true,
-        safetySettings: true,
+        emailReminders: true,
+        emailWeeklySummary: true,
         scoringWeights: true,
+        preferences: true,
         createdAt: true,
       },
     });
@@ -29,19 +30,6 @@ export async function GET() {
       return errorResponse(createError(ErrorCodes.NOT_FOUND, 'User not found', 404));
     }
 
-    // Default preferences
-    const emailPreferences = (user.emailPreferences as Record<string, boolean>) || {
-      reminders: true,
-      weeklySummary: true,
-      productUpdates: true,
-    };
-
-    const safetySettings = (user.safetySettings as Record<string, any>) || {
-      autoApplyEnabled: false, // Always false - we never auto-apply
-      requireConfirmation: true,
-      dataRetentionDays: 365,
-    };
-
     return successResponse({
       user: {
         id: user.id,
@@ -49,9 +37,12 @@ export async function GET() {
         email: user.email,
         createdAt: user.createdAt,
       },
-      emailPreferences,
-      safetySettings,
+      emailPreferences: {
+        reminders: user.emailReminders,
+        weeklySummary: user.emailWeeklySummary,
+      },
       scoringWeights: user.scoringWeights,
+      preferences: user.preferences,
     });
   } catch (error) {
     return errorResponse(error);
@@ -67,32 +58,21 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, emailPreferences, safetySettings } = body;
+    const { name, emailPreferences } = body;
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     if (name !== undefined) {
       updateData.name = name;
     }
 
     if (emailPreferences) {
-      updateData.emailPreferences = {
-        reminders: emailPreferences.reminders ?? true,
-        weeklySummary: emailPreferences.weeklySummary ?? true,
-        productUpdates: emailPreferences.productUpdates ?? true,
-      };
-    }
-
-    if (safetySettings) {
-      // IMPORTANT: Never allow autoApply to be enabled
-      updateData.safetySettings = {
-        autoApplyEnabled: false, // Always false
-        requireConfirmation: safetySettings.requireConfirmation ?? true,
-        dataRetentionDays: Math.min(
-          Math.max(safetySettings.dataRetentionDays || 365, 30),
-          730
-        ), // 30-730 days
-      };
+      if (emailPreferences.reminders !== undefined) {
+        updateData.emailReminders = emailPreferences.reminders;
+      }
+      if (emailPreferences.weeklySummary !== undefined) {
+        updateData.emailWeeklySummary = emailPreferences.weeklySummary;
+      }
     }
 
     const user = await prisma.user.update({
@@ -102,8 +82,8 @@ export async function PUT(request: NextRequest) {
         id: true,
         name: true,
         email: true,
-        emailPreferences: true,
-        safetySettings: true,
+        emailReminders: true,
+        emailWeeklySummary: true,
       },
     });
 

@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Get user profile
     const profile = await prisma.profile.findUnique({
       where: { userId: session.user.id },
-      include: { skills: true },
+      include: { skills: true, experiences: true },
     });
 
     if (!profile) {
@@ -45,50 +45,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ));
     }
 
-    // Calculate new score
-    const scoreResult = calculateScore(
-      {
-        desiredTitle: profile.desiredTitle,
-        desiredLocation: profile.desiredLocation,
-        remotePreference: profile.remotePreference || 'FLEXIBLE',
-        minSalary: profile.minSalary,
-        maxSalary: profile.maxSalary,
-        targetSeniority: profile.targetSeniority,
-        skills: profile.skills.map((s) => ({
-          name: s.name,
-          level: s.level,
-          yearsExp: s.yearsExp,
-        })),
-      },
-      {
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        description: job.description,
-        salary: job.salary,
-        requirements: job.requirements || [],
-      }
-    );
-
     // Get user's custom weights
     const weights = await prisma.userScoringWeights.findUnique({
       where: { userId: session.user.id },
     });
 
+    // Calculate new score
+    const scoreResult = calculateScore(profile, job, weights);
+
     // Create new score record
     const score = await prisma.jobScore.create({
       data: {
         jobId: job.id,
+        userId: session.user.id,
         profileVersion: profile.profileVersion,
-        overallScore: scoreResult.overall,
-        skillsScore: scoreResult.breakdown.skills,
-        locationScore: scoreResult.breakdown.location,
-        salaryScore: scoreResult.breakdown.salary,
-        seniorityScore: scoreResult.breakdown.seniority,
-        matchedSkills: scoreResult.matchedSkills || [],
-        missingSkills: scoreResult.missingSkills || [],
-        explanation: scoreResult.explanation,
-        weightsSnapshot: weights || undefined,
+        overallScore: Math.round(scoreResult.breakdown.calibratedScore),
+        breakdownJson: JSON.stringify(scoreResult.breakdown),
+        explanationJson: JSON.stringify(scoreResult.explanation),
       },
     });
 

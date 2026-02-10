@@ -25,18 +25,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         userId: session.user.id,
       },
       include: {
-        scores: {
+        jobScores: {
           orderBy: { createdAt: 'desc' },
         },
         applicationKits: {
           orderBy: { createdAt: 'desc' },
         },
-        pipelineItem: {
-          include: {
-            contacts: true,
-          },
-        },
-        feedback: true,
+        pipelineItem: true,
+        feedbacks: true,
+        contacts: true,
       },
     });
 
@@ -89,18 +86,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       data: {
         ...(result.data.title && { title: result.data.title }),
         ...(result.data.company && { company: result.data.company }),
+        ...(result.data.url !== undefined && { url: result.data.url || null }),
         ...(result.data.location !== undefined && { location: result.data.location }),
-        ...(result.data.description && { description: result.data.description }),
-        ...(result.data.salary !== undefined && { salary: result.data.salary }),
+        ...(result.data.descriptionRaw && { descriptionRaw: result.data.descriptionRaw }),
         ...(result.data.jobType && { jobType: result.data.jobType }),
-        ...(result.data.requirements && { requirements: result.data.requirements }),
-        ...(result.data.sourceUrl !== undefined && { sourceUrl: result.data.sourceUrl }),
-        ...(result.data.postedAt !== undefined && { 
-          postedAt: result.data.postedAt ? new Date(result.data.postedAt) : null 
-        }),
+        ...(result.data.remoteType && { remoteType: result.data.remoteType }),
+        ...(result.data.seniorityEstimate !== undefined && { seniorityEstimate: result.data.seniorityEstimate }),
+        ...(result.data.salaryMin !== undefined && { salaryMin: result.data.salaryMin }),
+        ...(result.data.salaryMax !== undefined && { salaryMax: result.data.salaryMax }),
+        ...(result.data.salaryCurrency !== undefined && { salaryCurrency: result.data.salaryCurrency }),
       },
       include: {
-        scores: {
+        jobScores: {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },

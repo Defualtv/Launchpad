@@ -18,10 +18,13 @@ export async function GET() {
 
     // Default weights if none set
     const defaultWeights = {
-      skillsWeight: 0.35,
-      locationWeight: 0.25,
-      salaryWeight: 0.25,
-      seniorityWeight: 0.15,
+      wSkills: 1.0,
+      wLocation: 1.0,
+      wSeniorityPenalty: 1.0,
+      wMustHaveGap: 1.0,
+      wNiceHaveGap: 0.5,
+      wSalary: 0.5,
+      bias: 0.0,
     };
 
     return successResponse({
@@ -42,25 +45,14 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { skillsWeight, locationWeight, salaryWeight, seniorityWeight } = body;
+    const { wSkills, wLocation, wSeniorityPenalty, wMustHaveGap, wNiceHaveGap, wSalary, bias } = body;
 
-    // Validate weights sum to 1 (with some tolerance)
-    const total = skillsWeight + locationWeight + salaryWeight + seniorityWeight;
-    if (Math.abs(total - 1) > 0.01) {
+    // Validate weights are reasonable (0-5 range)
+    const weightValues = [wSkills, wLocation, wSeniorityPenalty, wMustHaveGap, wNiceHaveGap, wSalary].filter(w => w !== undefined);
+    if (weightValues.some((w) => typeof w === 'number' && (w < 0 || w > 5))) {
       return errorResponse(createError(
         ErrorCodes.VALIDATION_ERROR,
-        'Weights must sum to 1.0',
-        400,
-        { total }
-      ));
-    }
-
-    // Validate each weight is between 0 and 1
-    const weights = [skillsWeight, locationWeight, salaryWeight, seniorityWeight];
-    if (weights.some((w) => w < 0 || w > 1)) {
-      return errorResponse(createError(
-        ErrorCodes.VALIDATION_ERROR,
-        'Each weight must be between 0 and 1',
+        'Each weight must be between 0 and 5',
         400
       ));
     }
@@ -69,16 +61,22 @@ export async function PUT(request: NextRequest) {
       where: { userId: session.user.id },
       create: {
         userId: session.user.id,
-        skillsWeight,
-        locationWeight,
-        salaryWeight,
-        seniorityWeight,
+        wSkills: wSkills ?? 1.0,
+        wLocation: wLocation ?? 1.0,
+        wSeniorityPenalty: wSeniorityPenalty ?? 1.0,
+        wMustHaveGap: wMustHaveGap ?? 1.0,
+        wNiceHaveGap: wNiceHaveGap ?? 0.5,
+        wSalary: wSalary ?? 0.5,
+        bias: bias ?? 0.0,
       },
       update: {
-        skillsWeight,
-        locationWeight,
-        salaryWeight,
-        seniorityWeight,
+        ...(wSkills !== undefined && { wSkills }),
+        ...(wLocation !== undefined && { wLocation }),
+        ...(wSeniorityPenalty !== undefined && { wSeniorityPenalty }),
+        ...(wMustHaveGap !== undefined && { wMustHaveGap }),
+        ...(wNiceHaveGap !== undefined && { wNiceHaveGap }),
+        ...(wSalary !== undefined && { wSalary }),
+        ...(bias !== undefined && { bias }),
       },
     });
 

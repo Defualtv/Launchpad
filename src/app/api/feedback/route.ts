@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { feedbackSchema } from '@/lib/validations';
 import { errorResponse, successResponse, createError, ErrorCodes } from '@/lib/errors';
-import { adjustWeights } from '@/lib/calibration';
+import { updateWeights } from '@/lib/calibration';
 
 // GET /api/feedback - Get user's feedback history
 export async function GET(request: NextRequest) {
@@ -71,12 +71,6 @@ export async function POST(request: NextRequest) {
         id: result.data.jobId,
         userId: session.user.id,
       },
-      include: {
-        scores: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
     });
 
     if (!job) {
@@ -86,54 +80,37 @@ export async function POST(request: NextRequest) {
     // Create feedback
     const feedback = await prisma.feedback.create({
       data: {
+        userId: session.user.id,
         jobId: result.data.jobId,
         outcome: result.data.outcome,
-        primaryFactor: result.data.primaryFactor,
-        secondaryFactors: result.data.secondaryFactors || [],
-        scoreAtFeedback: job.scores[0]?.overallScore,
-        notes: result.data.notes,
+        accuracy: result.data.accuracy,
+        factor: result.data.factor || null,
+        note: result.data.note || null,
       },
     });
 
     // Adjust scoring weights based on feedback
-    const currentWeights = await prisma.userScoringWeights.findUnique({
-      where: { userId: session.user.id },
+    await updateWeights(session.user.id, {
+      outcome: result.data.outcome,
+      accuracy: result.data.accuracy,
+      factor: result.data.factor || null,
     });
 
-    const newWeights = adjustWeights(
-      currentWeights || undefined,
-      result.data.outcome,
-      result.data.primaryFactor,
-      result.data.secondaryFactors || []
-    );
-
-    // Save updated weights
-    await prisma.userScoringWeights.upsert({
-      where: { userId: session.user.id },
-      create: {
-        userId: session.user.id,
-        ...newWeights,
-      },
-      update: newWeights,
+    // If outcome suggests end state, update pipeline stage
+    const pipelineItem = await prisma.pipelineItem.findUnique({
+      where: { jobId: job.id },
     });
 
-    // If outcome is ACCEPTED or REJECTED, update pipeline stage
-    if (job) {
-      const pipelineItem = await prisma.pipelineItem.findUnique({
-        where: { jobId: job.id },
-      });
-
-      if (pipelineItem) {
-        const newStage = result.data.outcome === 'ACCEPTED' ? 'OFFER' : 
-                         result.data.outcome === 'REJECTED' ? 'REJECTED' : 
-                         pipelineItem.stage;
-        
-        if (newStage !== pipelineItem.stage) {
-          await prisma.pipelineItem.update({
-            where: { id: pipelineItem.id },
-            data: { stage: newStage },
-          });
-        }
+    if (pipelineItem) {
+      const newStage = result.data.outcome === 'OFFER' ? 'OFFER' : 
+                       result.data.outcome === 'REJECTED' ? 'REJECTED' : 
+                       pipelineItem.stage;
+      
+      if (newStage !== pipelineItem.stage) {
+        await prisma.pipelineItem.update({
+          where: { id: pipelineItem.id },
+          data: { stage: newStage },
+        });
       }
     }
 

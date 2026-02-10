@@ -3,8 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { errorResponse, successResponse, createError, ErrorCodes } from '@/lib/errors';
-import { createCheckoutSession, createCustomerPortalSession } from '@/lib/stripe';
-import { PLANS } from '@/lib/plans';
+import { createCheckoutSession, createBillingPortalSession, getOrCreateCustomer } from '@/lib/stripe';
+import { PLANS, getPlanFromStatus } from '@/lib/plans';
 
 // GET /api/billing - Get billing info
 export async function GET() {
@@ -18,7 +18,6 @@ export async function GET() {
       where: { id: session.user.id },
       include: {
         subscription: true,
-        quotaUsage: true,
       },
     });
 
@@ -26,30 +25,41 @@ export async function GET() {
       return errorResponse(createError(ErrorCodes.NOT_FOUND, 'User not found', 404));
     }
 
-    const currentPlan = user.subscription?.planId || 'FREE';
-    const planDetails = PLANS[currentPlan as keyof typeof PLANS] || PLANS.FREE;
+    const currentPlanType = user.subscription 
+      ? getPlanFromStatus(user.subscription.status) 
+      : 'FREE';
+    const planDetails = PLANS[currentPlanType];
+
+    // Get current month quota
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const quotaUsage = await prisma.quotaUsage.findUnique({
+      where: {
+        userId_monthKey: {
+          userId: user.id,
+          monthKey: currentMonth,
+        },
+      },
+    });
 
     return successResponse({
       subscription: user.subscription
         ? {
             id: user.subscription.id,
-            planId: user.subscription.planId,
             status: user.subscription.status,
-            currentPeriodStart: user.subscription.currentPeriodStart,
             currentPeriodEnd: user.subscription.currentPeriodEnd,
             cancelAtPeriodEnd: user.subscription.cancelAtPeriodEnd,
           }
         : null,
       currentPlan: {
-        id: currentPlan,
+        id: currentPlanType,
         name: planDetails.name,
         limits: planDetails.limits,
         price: planDetails.price,
       },
       usage: {
         jobs: await prisma.job.count({ where: { userId: user.id } }),
-        aiGenerations: user.quotaUsage?.aiGenerationsUsed || 0,
-        aiGenerationsResetAt: user.quotaUsage?.aiGenerationsResetAt,
+        aiGenerations: quotaUsage?.aiGenerationsUsed || 0,
+        monthKey: currentMonth,
       },
       plans: Object.entries(PLANS).map(([id, plan]) => ({
         id,
@@ -57,7 +67,7 @@ export async function GET() {
         price: plan.price,
         limits: plan.limits,
         features: plan.features,
-        stripePriceId: plan.stripePriceId,
+        priceId: plan.priceId,
       })),
     });
   } catch (error) {
@@ -92,18 +102,28 @@ export async function POST(request: NextRequest) {
       }
 
       const plan = PLANS[planId as keyof typeof PLANS];
-      if (!plan.stripePriceId) {
+      if (!plan.priceId) {
         return errorResponse(createError(ErrorCodes.VALIDATION_ERROR, 'Plan is free', 400));
       }
 
-      const checkoutUrl = await createCheckoutSession({
-        userId: user.id,
-        email: session.user.email,
-        priceId: plan.stripePriceId,
-        customerId: user.subscription?.stripeCustomerId || undefined,
-      });
+      // Get or create Stripe customer
+      const customer = await getOrCreateCustomer(
+        session.user.email,
+        session.user.name || undefined,
+        user.subscription?.stripeCustomerId || undefined,
+      );
 
-      return successResponse({ url: checkoutUrl });
+      const origin = request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      
+      const checkoutSession = await createCheckoutSession(
+        customer.id,
+        plan.priceId,
+        user.id,
+        `${origin}/settings?billing=success`,
+        `${origin}/settings?billing=cancel`,
+      );
+
+      return successResponse({ url: checkoutSession.url });
     }
 
     if (action === 'portal') {
@@ -116,11 +136,14 @@ export async function POST(request: NextRequest) {
         ));
       }
 
-      const portalUrl = await createCustomerPortalSession(
-        user.subscription.stripeCustomerId
+      const origin = request.headers.get('origin') || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      
+      const portalSession = await createBillingPortalSession(
+        user.subscription.stripeCustomerId,
+        `${origin}/settings`,
       );
 
-      return successResponse({ url: portalUrl });
+      return successResponse({ url: portalSession.url });
     }
 
     return errorResponse(createError(ErrorCodes.VALIDATION_ERROR, 'Invalid action', 400));
