@@ -8,6 +8,11 @@ const authPaths = ['/login', '/register'];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
+  // Allow landing page (exact root path)
+  if (pathname === '/') {
+    return NextResponse.next();
+  }
+
   // Allow public paths
   if (publicPaths.some(path => pathname.startsWith(path))) {
     // If user is authenticated and trying to access auth pages, redirect to dashboard
