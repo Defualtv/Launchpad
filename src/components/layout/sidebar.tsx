@@ -18,10 +18,11 @@ import {
   Menu,
   FileText,
   Bell,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -41,7 +42,6 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Fetch unread notification count
   useEffect(() => {
     async function fetchUnreadCount() {
       try {
@@ -56,7 +56,6 @@ export function Sidebar() {
     }
     
     fetchUnreadCount();
-    // Poll every 60 seconds
     const interval = setInterval(fetchUnreadCount, 60000);
     return () => clearInterval(interval);
   }, []);
@@ -64,19 +63,17 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-4 left-4 z-50 md:hidden"
+      <button
+        className="fixed top-4 left-4 z-50 md:hidden w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:bg-slate-50 transition-colors"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
-        <Menu className="h-5 w-5" />
-      </Button>
+        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -84,39 +81,49 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen bg-card border-r transition-all duration-300',
-          collapsed ? 'w-16' : 'w-64',
+          'fixed left-0 top-0 z-40 h-screen bg-white border-r border-slate-200/80 transition-all duration-300',
+          collapsed ? 'w-[72px]' : 'w-64',
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className={cn(
-            'flex items-center h-16 border-b px-4',
+            'flex items-center h-16 px-4',
             collapsed ? 'justify-center' : 'justify-between'
           )}>
             {!collapsed && (
-              <Link href="/dashboard" className="flex items-center gap-2">
-                <Briefcase className="h-6 w-6 text-primary" />
-                <span className="font-bold text-lg">JobCircle</span>
+              <Link href="/dashboard" className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-md shadow-violet-500/20">
+                  <Briefcase className="h-4 w-4 text-white" />
+                </div>
+                <span className="font-bold text-lg tracking-tight">JobPilot</span>
               </Link>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden md:flex"
+            {collapsed && (
+              <Link href="/dashboard">
+                <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center shadow-md shadow-violet-500/20">
+                  <Briefcase className="h-5 w-5 text-white" />
+                </div>
+              </Link>
+            )}
+            <button
+              className={cn(
+                'hidden md:flex w-7 h-7 items-center justify-center rounded-lg hover:bg-slate-100 text-muted-foreground transition-colors',
+                collapsed && 'absolute -right-3.5 top-5 bg-white border border-slate-200 shadow-sm rounded-full w-7 h-7'
+              )}
               onClick={() => setCollapsed(!collapsed)}
             >
               {collapsed ? (
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3.5 w-3.5" />
               ) : (
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-3.5 w-3.5" />
               )}
-            </Button>
+            </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 py-4 px-2">
+          <nav className="flex-1 py-3 px-3 overflow-y-auto">
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -127,66 +134,89 @@ export function Sidebar() {
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-md transition-colors relative',
+                        'group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative',
                         isActive
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted text-muted-foreground hover:text-foreground',
-                        collapsed && 'justify-center'
+                          ? 'gradient-primary text-white shadow-md shadow-violet-500/20'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-foreground',
+                        collapsed && 'justify-center px-0'
                       )}
                     >
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
-                      {!collapsed && <span>{item.label}</span>}
+                      <item.icon className={cn(
+                        'h-[18px] w-[18px] flex-shrink-0 transition-transform',
+                        !isActive && 'group-hover:scale-110'
+                      )} />
+                      {!collapsed && (
+                        <span className="text-sm font-medium">{item.label}</span>
+                      )}
                       {showNotificationBadge && (
-                        <Badge 
-                          variant="destructive" 
+                        <span 
                           className={cn(
-                            'h-5 min-w-5 flex items-center justify-center p-0 text-xs',
-                            collapsed ? 'absolute -top-1 -right-1' : 'ml-auto'
+                            'flex items-center justify-center text-[10px] font-bold rounded-full',
+                            isActive 
+                              ? 'bg-white text-violet-600' 
+                              : 'bg-violet-100 text-violet-700',
+                            collapsed 
+                              ? 'absolute -top-1 -right-1 h-4 min-w-4 px-1' 
+                              : 'ml-auto h-5 min-w-5 px-1.5'
                           )}
                         >
                           {unreadCount > 99 ? '99+' : unreadCount}
-                        </Badge>
+                        </span>
                       )}
                     </Link>
                   </li>
                 );
               })}
             </ul>
+
+            {/* AI badge */}
+            {!collapsed && (
+              <div className="mt-6 mx-1 p-3 rounded-xl bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-100">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Sparkles className="h-4 w-4 text-violet-600" />
+                  <span className="text-xs font-semibold text-violet-900">AI Powered</span>
+                </div>
+                <p className="text-[11px] text-violet-600 leading-relaxed">Get match scores and cover letters instantly.</p>
+              </div>
+            )}
           </nav>
 
           {/* Admin link */}
           {session?.user?.email && (
-            <div className="px-2 py-2 border-t">
+            <div className="px-3 py-2 border-t border-slate-100">
               <Link
                 href="/admin"
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
-                  pathname.startsWith('/admin') && 'bg-primary text-primary-foreground',
-                  collapsed && 'justify-center'
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-foreground transition-all',
+                  pathname.startsWith('/admin') && 'gradient-primary text-white shadow-md shadow-violet-500/20',
+                  collapsed && 'justify-center px-0'
                 )}
               >
-                <Shield className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>Admin</span>}
+                <Shield className="h-[18px] w-[18px] flex-shrink-0" />
+                {!collapsed && <span className="text-sm font-medium">Admin</span>}
               </Link>
             </div>
           )}
 
           {/* User section */}
-          <div className="p-4 border-t">
+          <div className="p-3 border-t border-slate-100">
             {!collapsed && session?.user && (
-              <div className="mb-3">
+              <div className="mb-2 px-3">
                 <p className="font-medium text-sm truncate">{session.user.name || session.user.email}</p>
                 <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
               </div>
             )}
             <Button
               variant="ghost"
-              className={cn('w-full', collapsed ? 'px-0' : 'justify-start')}
+              className={cn(
+                'w-full rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors',
+                collapsed ? 'px-0 justify-center' : 'justify-start px-3'
+              )}
               onClick={() => signOut({ callbackUrl: '/login' })}
             >
               <LogOut className="h-4 w-4" />
-              {!collapsed && <span className="ml-2">Sign out</span>}
+              {!collapsed && <span className="ml-2 text-sm">Sign out</span>}
             </Button>
           </div>
         </div>

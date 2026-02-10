@@ -6,9 +6,9 @@ import { Providers } from '@/components/providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Job Agent - Smart Job Application Assistant',
+  title: 'JobPilot — AI-Powered Job Search Assistant',
   description: 'Track jobs, get match scores, and prepare winning applications with AI-powered assistance.',
-  keywords: ['job search', 'job application', 'resume', 'cover letter', 'interview prep'],
+  keywords: ['job search', 'job application', 'resume', 'cover letter', 'interview prep', 'AI'],
 };
 
 export default function RootLayout({
